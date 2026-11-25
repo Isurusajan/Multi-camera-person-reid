@@ -1,0 +1,28 @@
+﻿# Python virtual environment
+venv/
+env/
+.venv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.class
+*.pyc
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary & debug files
+*.log
+bus.jpg
+videos/debug_*.jpg
+videos/inspect_*.jpg
+videos/test_ann_*.jpg
+videos/comparison_crops.jpg
+
+# OS generated files
+.DS_Store
+Thumbs.db
