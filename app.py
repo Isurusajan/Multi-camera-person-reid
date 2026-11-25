@@ -26,47 +26,32 @@ st.set_page_config(
 st.title("Multi-Camera Surveillance & Person Re-Identification")
 st.caption("Real-time video analytics pipeline for cross-camera person tracking, appearance feature extraction, and global identity management.")
 
-# Video Player Overlay CSS
+# Video Player & Controls CSS
 st.markdown("""
 <style>
-/* Modern Video Player Wrapper Box */
-.st-key-modern_player_box {
-    position: relative !important;
-    border-radius: 12px !important;
-    overflow: hidden !important;
-    background: #0b0f19 !important;
-    box-shadow: 0 14px 40px rgba(0,0,0,0.7) !important;
-    border: 1px solid rgba(255, 255, 255, 0.08) !important;
-    margin-bottom: 20px !important;
-}
-
-.st-key-modern_player_box div[data-testid="stImage"] {
-    margin-bottom: 0px !important;
-    padding-bottom: 0px !important;
-}
-
-.st-key-modern_player_box div[data-testid="stImage"] img {
-    display: block !important;
+/* Video Feed Card */
+div[data-testid="stImage"] img {
+    border-radius: 10px !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     width: 100% !important;
-    border-radius: 12px 12px 0 0 !important;
 }
 
-/* In-Video Overlay Control Bar (Overlaid inside bottom of video) */
+/* Modern Video Player Controls Bar */
 .st-key-in_video_controls {
-    position: relative !important;
-    margin-top: -68px !important;
-    background: linear-gradient(180deg, transparent 0%, rgba(10, 15, 30, 0.78) 35%, rgba(10, 15, 30, 0.98) 100%) !important;
-    padding: 2px 16px 8px 16px !important;
-    z-index: 100 !important;
-    backdrop-filter: blur(8px) !important;
-    border-bottom-left-radius: 12px !important;
-    border-bottom-right-radius: 12px !important;
+    background: #0f172a !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 10px !important;
+    padding: 6px 16px 10px 16px !important;
+    margin-top: 8px !important;
+    margin-bottom: 20px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
 }
+
 /* Single Video Player Scrubber Timeline (Only ONE bar on screen) */
-/* Scrubber Timeline Slider (Directly Overlaid on the Progress Bar for Clicking & Dragging) */
 .st-key-in_video_controls div[data-testid="stSlider"] {
     margin-top: 0px !important;
-    margin-bottom: -14px !important;
+    margin-bottom: -10px !important;
     padding-top: 0px !important;
     padding-bottom: 0px !important;
     position: relative !important;
@@ -378,63 +363,62 @@ if is_cctv_file:
     if cam1_source is None:
         st.info("👈 **Please upload your surveillance video (.mp4, .avi, .mov) in the left sidebar to start.**")
 
-    # In-Video Modern Player Container (Video + Overlaid Controls)
-    with st.container(key="modern_player_box"):
-        video_placeholder1 = st.empty()
-        video_placeholder2 = None
+    # Video Display Container
+    video_placeholder1 = st.empty()
+    video_placeholder2 = None
 
-        with st.container(key="in_video_controls"):
-            current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
+    with st.container(key="in_video_controls"):
+        current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
 
-            # Callback for scrubber click/drag seeking
-            def on_timeline_scrub():
-                scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
-                st.session_state.current_frame_pos = int(scrub_val * video_fps)
-                st.session_state.scrubber_pos = scrub_val
-                st.session_state.last_scrub_input = scrub_val
-                st.session_state.is_running = True
-                if "pipeline" in st.session_state and st.session_state.pipeline is not None:
-                    st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+        # Callback for scrubber click/drag seeking
+        def on_timeline_scrub():
+            scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
+            st.session_state.current_frame_pos = int(scrub_val * video_fps)
+            st.session_state.scrubber_pos = scrub_val
+            st.session_state.last_scrub_input = scrub_val
+            st.session_state.is_running = True
+            if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
 
-            # 1. Edge-to-Edge In-Video Scrubber Slider (The Single Clean Video Timeline)
-            scrub_sec = st.slider(
-                "Timeline",
-                min_value=0.0,
-                max_value=float(round(total_sec, 1)),
-                value=current_time_val,
-                step=0.5,
-                format="%.1fs",
-                key="timeline_scrubber_slider",
-                label_visibility="collapsed",
-                on_change=on_timeline_scrub,
-                help="Click or drag anywhere on this timeline bar to scrub forward or backward."
+        # 1. Edge-to-Edge In-Video Scrubber Slider (The Single Clean Video Timeline)
+        scrub_sec = st.slider(
+            "Timeline",
+            min_value=0.0,
+            max_value=float(round(total_sec, 1)),
+            value=current_time_val,
+            step=0.5,
+            format="%.1fs",
+            key="timeline_scrubber_slider",
+            label_visibility="collapsed",
+            on_change=on_timeline_scrub,
+            help="Click or drag anywhere on this timeline bar to scrub forward or backward."
+        )
+
+        # 2. In-Video Control Row: [Pause/Resume button] [Live Timecode] [AI Status]
+        ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([1.3, 4.2, 2.5])
+        with ctrl_c1:
+            is_active = st.session_state.is_running
+            btn_play_pause = st.button(
+                "⏸️ Pause" if is_active else "▶️ Resume",
+                key="btn_in_video_toggle",
+                use_container_width=True
             )
+            if btn_play_pause:
+                if st.session_state.is_running:
+                    st.session_state.is_running = False
+                else:
+                    if st.session_state.current_frame_pos >= total_frames - 5:
+                        st.session_state.current_frame_pos = 0
+                        st.session_state.scrubber_pos = 0.0
+                        st.session_state.last_scrub_input = 0.0
+                    st.session_state.is_running = True
+                st.rerun()
 
-            # 2. In-Video Control Row: [Pause/Resume button] [Live Timecode] [AI Status]
-            ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([1.3, 4.2, 2.5])
-            with ctrl_c1:
-                is_active = st.session_state.is_running
-                btn_play_pause = st.button(
-                    "⏸️ Pause" if is_active else "▶️ Resume",
-                    key="btn_in_video_toggle",
-                    use_container_width=True
-                )
-                if btn_play_pause:
-                    if st.session_state.is_running:
-                        st.session_state.is_running = False
-                    else:
-                        if st.session_state.current_frame_pos >= total_frames - 5:
-                            st.session_state.current_frame_pos = 0
-                            st.session_state.scrubber_pos = 0.0
-                            st.session_state.last_scrub_input = 0.0
-                        st.session_state.is_running = True
-                    st.rerun()
+        with ctrl_c2:
+            timecode_placeholder = st.empty()
 
-            with ctrl_c2:
-                timecode_placeholder = st.empty()
-
-            with ctrl_c3:
-                status_placeholder = st.empty()
+        with ctrl_c3:
+            status_placeholder = st.empty()
 
     if "last_scrub_input" not in st.session_state:
         st.session_state.last_scrub_input = current_time_val
@@ -721,7 +705,10 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
 
                     frame_idx += 1
-                    time.sleep(0.001)
+                    target_delay = 1.0 / max(10.0, video_fps)
+                    elapsed = t_end - t_start
+                    sleep_time = max(0.005, target_delay - elapsed)
+                    time.sleep(sleep_time)
             finally:
                 cap1.release()
 
@@ -851,7 +838,10 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
 
                     frame_idx += 1
-                    time.sleep(0.001)
+                    target_delay = 1.0 / max(10.0, video_fps)
+                    elapsed = t_end - t_start
+                    sleep_time = max(0.005, target_delay - elapsed)
+                    time.sleep(sleep_time)
             finally:
                 cap1.release()
                 cap2.release()
