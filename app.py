@@ -5,8 +5,10 @@ Optimized for 20-30+ FPS Real-Time Inference on CPU
 import os
 import sys
 import time
+import base64
 import tempfile
 import cv2
+import numpy as np
 import importlib
 import pandas as pd
 import streamlit as st
@@ -124,7 +126,7 @@ div[data-testid="stImage"] img {
 </style>
 """, unsafe_allow_html=True)
 
-# Global frame prepper
+# Global frame prepper and zero-HTTP Streamlit Cloud video renderer
 def prep_frame(img, max_w=640):
     if img is None:
         return None
@@ -133,6 +135,28 @@ def prep_frame(img, max_w=640):
         scale = max_w / float(w)
         img = cv2.resize(img, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+def render_video_frame(placeholder, frame_bgr, max_w=640):
+    """
+    Renders video frames directly into Streamlit DOM via Base64 Data URI.
+    Eliminates separate HTTP GET media requests, prevents browser connection stalling,
+    and guarantees zero-freeze playback on Streamlit Community Cloud.
+    """
+    if placeholder is None or frame_bgr is None:
+        return
+    h, w = frame_bgr.shape[:2]
+    if w > max_w:
+        scale = max_w / float(w)
+        frame_bgr = cv2.resize(frame_bgr, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
+    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+    if ret:
+        b64 = base64.b64encode(buf).decode('ascii')
+        placeholder.markdown(
+            f'<div style="width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);">'
+            f'<img src="data:image/jpeg;base64,{b64}" style="width: 100%; height: auto; display: block;" />'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 
 # Sidebar Settings
 st.sidebar.header("Stream Configuration")
@@ -509,7 +533,7 @@ with tab4:
     5. Transfer the `.mp4` videos to your PC and select **"Upload Custom Dual Video Files"** in the sidebar.
     """)
 
-def render_tabs(trans_log, gallery_identities):
+def render_tabs(trans_log, gallery_identities, include_dossier=True):
     # Tab 1: Activity & Re-ID Events
     with transition_placeholder.container():
         if trans_log:
@@ -523,7 +547,7 @@ def render_tabs(trans_log, gallery_identities):
                         "Surveillance Event": entry.get("event_type", "Re-identified"),
                         "Match Confidence": f"{int(entry.get('similarity', 0.0) * 100)}%"
                     })
-                st.dataframe(pd.DataFrame(formatted_events), use_container_width=True)
+                st.dataframe(pd.DataFrame(formatted_events), width="stretch")
             else:
                 formatted_events = []
                 for entry in trans_log[::-1]:
@@ -535,7 +559,7 @@ def render_tabs(trans_log, gallery_identities):
                         "Transition Type": entry.get("event_type", ""),
                         "Match Confidence": f"{int(entry.get('similarity', 0.0) * 100)}%"
                     })
-                st.dataframe(pd.DataFrame(formatted_events), use_container_width=True)
+                st.dataframe(pd.DataFrame(formatted_events), width="stretch")
         else:
             if is_single_cam:
                 st.info("Monitoring single surveillance feed. Re-identification and detection events will appear here.")
@@ -554,12 +578,15 @@ def render_tabs(trans_log, gallery_identities):
                     "Snapshots Captured": len(meta.get("snapshots", [])),
                     "Last Seen Timestamp": time.strftime("%H:%M:%S", time.localtime(meta["last_time"]))
                 })
-            st.dataframe(pd.DataFrame(reg_data), use_container_width=True)
+            st.dataframe(pd.DataFrame(reg_data), width="stretch")
             st.caption("🔍 Switch to the **'Person Dossier (Forensic Inspector)'** tab above to view multi-angle mugshots and full movement history.")
         else:
             st.info("Monitoring stream. Detected persons will be registered into the global identity catalog.")
 
     # Tab 3: Detailed Person Dossier (Forensic Multi-Angle Snapshot Inspector)
+    if not include_dossier:
+        return
+
     with dossier_placeholder.container():
         if gallery_identities:
             st.markdown("#### Person Forensic Dossier & Visual Multi-Shot Inspector")
@@ -631,16 +658,12 @@ if st.session_state.is_running:
                         st.session_state.current_frame_pos = 0
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
                         if timecode_placeholder:
                             timecode_placeholder.markdown(
                                 "<div style='color: #4ade80; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px;'>"
                                 "✅ Completed! Drag slider to replay"
-                                "</div>"
-                                "<style>"
-                                ".st-key-in_video_controls div[data-testid='stSlider'] div[data-rac][style*='left'] { left: 100% !important; }"
-                                ".st-key-in_video_controls div[data-testid='stSlider'] div[class*='e13xtgje5'] { background: linear-gradient(90deg, #ff2222 100%, rgba(255,255,255,0.22) 100%) !important; }"
-                                "</style>",
+                                "</div>",
                                 unsafe_allow_html=True
                             )
                         if status_placeholder:
@@ -662,32 +685,21 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    video_placeholder1.image(
-                        prep_frame(ann1, max_w=640),
-                        channels="RGB",
-                        width="stretch",
-                        output_format="JPEG"
-                    )
+                    render_video_frame(video_placeholder1, ann1, max_w=640)
 
-                    # Update in-video control bar timecode, single timeline slider, and live AI tracking status
+                    # Update in-video control bar timecode and live AI tracking status
                     cur_f = int(cap1.get(cv2.CAP_PROP_POS_FRAMES))
                     st.session_state.current_frame_pos = cur_f
                     cur_s = cur_f / video_fps
-                    pct = min(1.0, max(0.0, float(cur_f) / max(1, total_frames)))
-                    pct_str = f"{pct * 100:.1f}%"
 
-                    # Throttle DOM/CSS updates to avoid browser layout thrashing and freezing
-                    if frame_idx % 3 == 0:
+                    # Smooth timecode & status display without DOM style recalculation thrashing
+                    if frame_idx % 2 == 0:
                         if timecode_placeholder:
                             timecode_placeholder.markdown(
                                 f"<div style='color: #ffffff; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
                                 f"⏱️ {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
                                 f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {cur_f}/{total_frames})</span>"
-                                f"</div>"
-                                f"<style>"
-                                f".st-key-in_video_controls div[data-testid='stSlider'] div[data-rac][style*='left'] {{ left: {pct_str} !important; }}"
-                                f".st-key-in_video_controls div[data-testid='stSlider'] div[class*='e13xtgje5'] {{ background: linear-gradient(90deg, #ff2222 {pct_str}, rgba(255,255,255,0.22) {pct_str}) !important; }}"
-                                f"</style>",
+                                f"</div>",
                                 unsafe_allow_html=True
                             )
                         if status_placeholder:
@@ -706,15 +718,17 @@ if st.session_state.is_running:
                         m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    if frame_idx % 8 == 0:
+                    # Calm tab update during active streaming (skips expensive forensic mugshot expanders)
+                    if frame_idx % 35 == 0:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_delay = 1.0 / max(10.0, video_fps)
-                    elapsed = t_end - t_start
-                    sleep_time = max(0.005, target_delay - elapsed)
+                    target_fps = min(18.0, float(video_fps))
+                    target_delay = 1.0 / target_fps
+                    elapsed = time.perf_counter() - t_start
+                    sleep_time = max(0.012, target_delay - elapsed)
                     time.sleep(sleep_time)
             finally:
                 cap1.release()
@@ -758,25 +772,20 @@ if st.session_state.is_running:
                             fps_history.pop(0)
                         avg_fps = sum(fps_history) / len(fps_history)
 
-                        video_placeholder1.image(
-                            prep_frame(ann1, max_w=640),
-                            channels="RGB",
-                            width="stretch",
-                            output_format="JPEG"
-                        )
+                        render_video_frame(video_placeholder1, ann1, max_w=640)
 
                         # Update metrics on every frame
                         m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
                         m_active.metric("Active in Camera View", len(objs1))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                        if frame_idx % 8 == 0:
+                        if frame_idx % 35 == 0:
                             st.session_state.transition_log = list(pipeline.gallery.transition_log)
                             st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
+                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                         frame_idx += 1
-                        time.sleep(0.001)
+                        time.sleep(0.015)
                 finally:
                     cap1.release()
 
@@ -819,7 +828,7 @@ if st.session_state.is_running:
                         st.session_state.is_running = False
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
                         break
 
                     t_start = time.perf_counter()
@@ -834,18 +843,8 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    video_placeholder1.image(
-                        prep_frame(ann1, max_w=640),
-                        channels="RGB",
-                        width="stretch",
-                        output_format="JPEG"
-                    )
-                    video_placeholder2.image(
-                        prep_frame(ann2, max_w=640),
-                        channels="RGB",
-                        width="stretch",
-                        output_format="JPEG"
-                    )
+                    render_video_frame(video_placeholder1, ann1, max_w=640)
+                    render_video_frame(video_placeholder2, ann2, max_w=640)
 
                     if frame_idx % 5 == 0:
                         total_unique = len(pipeline.gallery.identities)
@@ -854,15 +853,16 @@ if st.session_state.is_running:
                         m_cam2.metric("Active in Camera 02", len(objs2))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    if frame_idx % 10 == 0:
+                    if frame_idx % 35 == 0:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_delay = 1.0 / max(10.0, video_fps)
-                    elapsed = t_end - t_start
-                    sleep_time = max(0.005, target_delay - elapsed)
+                    target_fps = min(18.0, float(video_fps))
+                    target_delay = 1.0 / target_fps
+                    elapsed = time.perf_counter() - t_start
+                    sleep_time = max(0.012, target_delay - elapsed)
                     time.sleep(sleep_time)
             finally:
                 cap1.release()
@@ -875,25 +875,14 @@ else:
         cap_prev.set(cv2.CAP_PROP_POS_FRAMES, pos)
         r, f = cap_prev.read()
         if r and f is not None:
-            video_placeholder1.image(
-                prep_frame(f, max_w=640),
-                channels="RGB",
-                width="stretch",
-                output_format="JPEG"
-            )
+            render_video_frame(video_placeholder1, f, max_w=640)
             cur_s = pos / video_fps
-            pct = min(1.0, max(0.0, float(pos) / max(1, total_frames)))
-            pct_str = f"{pct * 100:.1f}%"
             if timecode_placeholder:
                 timecode_placeholder.markdown(
                     f"<div style='color: #fbbf24; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
                     f"⏸️ Paused at {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
                     f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {pos}/{total_frames})</span>"
-                    f"</div>"
-                    f"<style>"
-                    f".st-key-in_video_controls div[data-testid='stSlider'] div[data-rac][style*='left'] {{ left: {pct_str} !important; }}"
-                    f".st-key-in_video_controls div[data-testid='stSlider'] div[class*='e13xtgje5'] {{ background: linear-gradient(90deg, #ff2222 {pct_str}, rgba(255,255,255,0.22) {pct_str}) !important; }}"
-                    f"</style>",
+                    f"</div>",
                     unsafe_allow_html=True
                 )
             if status_placeholder:
@@ -913,19 +902,9 @@ else:
             r1, f1 = cp1.read()
             r2, f2 = cp2.read()
             if r1 and f1 is not None and video_placeholder1:
-                video_placeholder1.image(
-                    prep_frame(f1, max_w=640),
-                    channels="RGB",
-                    width="stretch",
-                    output_format="JPEG"
-                )
+                render_video_frame(video_placeholder1, f1, max_w=640)
             if r2 and f2 is not None and video_placeholder2:
-                video_placeholder2.image(
-                    prep_frame(f2, max_w=640),
-                    channels="RGB",
-                    width="stretch",
-                    output_format="JPEG"
-                )
+                render_video_frame(video_placeholder2, f2, max_w=640)
             cp1.release()
             cp2.release()
         st.info("Click **Start Feed** in the sidebar to run inference and record transitions.")
