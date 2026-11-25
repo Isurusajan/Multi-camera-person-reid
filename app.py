@@ -125,7 +125,7 @@ div[data-testid="stImage"] img {
 """, unsafe_allow_html=True)
 
 # Global frame prepper
-def prep_frame(img, max_w=854):
+def prep_frame(img, max_w=640):
     if img is None:
         return None
     h, w = img.shape[:2]
@@ -662,7 +662,12 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    video_placeholder1.image(prep_frame(ann1), channels="RGB", use_container_width=True)
+                    video_placeholder1.image(
+                        prep_frame(ann1, max_w=640),
+                        channels="RGB",
+                        width="stretch",
+                        output_format="JPEG"
+                    )
 
                     # Update in-video control bar timecode, single timeline slider, and live AI tracking status
                     cur_f = int(cap1.get(cv2.CAP_PROP_POS_FRAMES))
@@ -671,25 +676,27 @@ if st.session_state.is_running:
                     pct = min(1.0, max(0.0, float(cur_f) / max(1, total_frames)))
                     pct_str = f"{pct * 100:.1f}%"
 
-                    if timecode_placeholder:
-                        timecode_placeholder.markdown(
-                            f"<div style='color: #ffffff; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
-                            f"⏱️ {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
-                            f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {cur_f}/{total_frames})</span>"
-                            f"</div>"
-                            f"<style>"
-                            f".st-key-in_video_controls div[data-testid='stSlider'] div[data-rac][style*='left'] {{ left: {pct_str} !important; }}"
-                            f".st-key-in_video_controls div[data-testid='stSlider'] div[class*='e13xtgje5'] {{ background: linear-gradient(90deg, #ff2222 {pct_str}, rgba(255,255,255,0.22) {pct_str}) !important; }}"
-                            f"</style>",
-                            unsafe_allow_html=True
-                        )
-                    if status_placeholder:
-                        status_placeholder.markdown(
-                            f"<div style='text-align: right; color: #4ade80; font-family: monospace; font-size: 12px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
-                            f"🟢 {avg_fps:.1f} FPS | Tracking"
-                            f"</div>",
-                            unsafe_allow_html=True
-                        )
+                    # Throttle DOM/CSS updates to avoid browser layout thrashing and freezing
+                    if frame_idx % 3 == 0:
+                        if timecode_placeholder:
+                            timecode_placeholder.markdown(
+                                f"<div style='color: #ffffff; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
+                                f"⏱️ {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
+                                f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {cur_f}/{total_frames})</span>"
+                                f"</div>"
+                                f"<style>"
+                                f".st-key-in_video_controls div[data-testid='stSlider'] div[data-rac][style*='left'] {{ left: {pct_str} !important; }}"
+                                f".st-key-in_video_controls div[data-testid='stSlider'] div[class*='e13xtgje5'] {{ background: linear-gradient(90deg, #ff2222 {pct_str}, rgba(255,255,255,0.22) {pct_str}) !important; }}"
+                                f"</style>",
+                                unsafe_allow_html=True
+                            )
+                        if status_placeholder:
+                            status_placeholder.markdown(
+                                f"<div style='text-align: right; color: #4ade80; font-family: monospace; font-size: 12px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
+                                f"🟢 {avg_fps:.1f} FPS | Tracking"
+                                f"</div>",
+                                unsafe_allow_html=True
+                            )
 
                     # Update active in view on every frame so exit/clearance reflects immediately
                     m_active.metric("Active in Camera View", len(objs1))
@@ -751,7 +758,12 @@ if st.session_state.is_running:
                             fps_history.pop(0)
                         avg_fps = sum(fps_history) / len(fps_history)
 
-                        video_placeholder1.image(prep_frame(ann1), channels="RGB", use_container_width=True)
+                        video_placeholder1.image(
+                            prep_frame(ann1, max_w=640),
+                            channels="RGB",
+                            width="stretch",
+                            output_format="JPEG"
+                        )
 
                         # Update metrics on every frame
                         m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
@@ -822,8 +834,18 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    video_placeholder1.image(prep_frame(ann1, max_w=640), channels="RGB", use_container_width=True)
-                    video_placeholder2.image(prep_frame(ann2, max_w=640), channels="RGB", use_container_width=True)
+                    video_placeholder1.image(
+                        prep_frame(ann1, max_w=640),
+                        channels="RGB",
+                        width="stretch",
+                        output_format="JPEG"
+                    )
+                    video_placeholder2.image(
+                        prep_frame(ann2, max_w=640),
+                        channels="RGB",
+                        width="stretch",
+                        output_format="JPEG"
+                    )
 
                     if frame_idx % 5 == 0:
                         total_unique = len(pipeline.gallery.identities)
@@ -853,7 +875,12 @@ else:
         cap_prev.set(cv2.CAP_PROP_POS_FRAMES, pos)
         r, f = cap_prev.read()
         if r and f is not None:
-            video_placeholder1.image(prep_frame(f), channels="RGB", use_container_width=True)
+            video_placeholder1.image(
+                prep_frame(f, max_w=640),
+                channels="RGB",
+                width="stretch",
+                output_format="JPEG"
+            )
             cur_s = pos / video_fps
             pct = min(1.0, max(0.0, float(pos) / max(1, total_frames)))
             pct_str = f"{pct * 100:.1f}%"
@@ -886,9 +913,19 @@ else:
             r1, f1 = cp1.read()
             r2, f2 = cp2.read()
             if r1 and f1 is not None and video_placeholder1:
-                video_placeholder1.image(prep_frame(f1, max_w=640), channels="RGB", use_container_width=True)
+                video_placeholder1.image(
+                    prep_frame(f1, max_w=640),
+                    channels="RGB",
+                    width="stretch",
+                    output_format="JPEG"
+                )
             if r2 and f2 is not None and video_placeholder2:
-                video_placeholder2.image(prep_frame(f2, max_w=640), channels="RGB", use_container_width=True)
+                video_placeholder2.image(
+                    prep_frame(f2, max_w=640),
+                    channels="RGB",
+                    width="stretch",
+                    output_format="JPEG"
+                )
             cp1.release()
             cp2.release()
         st.info("Click **Start Feed** in the sidebar to run inference and record transitions.")
