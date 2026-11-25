@@ -190,33 +190,58 @@ dual_mode = ""
 if is_cctv_file:
     st.sidebar.markdown("---")
     st.sidebar.subheader("Surveillance Footage")
-    file_single = st.sidebar.file_uploader(
-        "Upload CCTV Video (.mp4, .avi, .mov)",
-        type=["mp4", "avi", "mov", "mkv"],
-        help="Upload standard surveillance video footage to analyze"
+    video_source_option = st.sidebar.selectbox(
+        "Choose Video Footage:",
+        [
+            "-- Choose a Video --",
+            "📁 Upload CCTV Video File (.mp4, .avi)",
+            "🏪 Demo 1: Store Checkout Counter",
+            "🛒 Demo 2: Retail Mart Snack Aisle",
+        ],
+        index=0,
+        help="Select '-- Choose a Video --' to start empty, upload your own video, or select a demo footage"
     )
-    default_cctv_path = os.path.join("videos", "cctv_single_feed.mp4")
 
-    if file_single is not None:
-        if "uploaded_video_path" not in st.session_state or st.session_state.get("uploaded_filename") != file_single.name:
-            tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-            file_single.seek(0)
-            tfile.write(file_single.read())
-            tfile.flush()
-            tfile.close()
-            st.session_state.uploaded_video_path = tfile.name
-            st.session_state.uploaded_filename = file_single.name
-            st.session_state.pipeline = None
-            st.session_state.current_frame_pos = 0
-            st.session_state.scrubber_pos = 0.0
-            st.session_state.last_scrub_input = 0.0
-        cam1_source = st.session_state.uploaded_video_path
-        st.sidebar.success(f"📹 Loaded: {file_single.name}")
-    elif os.path.exists(default_cctv_path):
-        cam1_source = default_cctv_path
-        st.sidebar.info("📹 Active: Store Checkout Counter Surveillance")
-    else:
-        st.sidebar.info("Upload your surveillance video file (.mp4, .avi) to begin tracking.")
+    if video_source_option == "📁 Upload CCTV Video File (.mp4, .avi)":
+        file_single = st.sidebar.file_uploader(
+            "Upload CCTV Video (.mp4, .avi, .mov)",
+            type=["mp4", "avi", "mov", "mkv"],
+            help="Upload standard surveillance video footage to analyze"
+        )
+        if file_single is not None:
+            if "uploaded_video_path" not in st.session_state or st.session_state.get("uploaded_filename") != file_single.name:
+                tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+                file_single.seek(0)
+                tfile.write(file_single.read())
+                tfile.flush()
+                tfile.close()
+                st.session_state.uploaded_video_path = tfile.name
+                st.session_state.uploaded_filename = file_single.name
+                st.session_state.pipeline = None
+                st.session_state.current_frame_pos = 0
+                st.session_state.scrubber_pos = 0.0
+                st.session_state.last_scrub_input = 0.0
+            cam1_source = st.session_state.uploaded_video_path
+            st.sidebar.success(f"📹 Loaded: {file_single.name}")
+        else:
+            cam1_source = None
+            st.sidebar.info("👈 Please select or drag a video file to upload.")
+
+    elif video_source_option == "🏪 Demo 1: Store Checkout Counter":
+        cctv_path = os.path.join("videos", "cctv_single_feed.mp4")
+        if os.path.exists(cctv_path):
+            cam1_source = cctv_path
+            st.sidebar.success("📹 Loaded: Store Checkout Counter Surveillance")
+
+    elif video_source_option == "🛒 Demo 2: Retail Mart Snack Aisle":
+        mart_path = os.path.join("videos", "mart_cam1_aisle.mp4")
+        if os.path.exists(mart_path):
+            cam1_source = mart_path
+            st.sidebar.success("📹 Loaded: Retail Mart Snack Aisle Surveillance")
+
+    else:  # "-- Choose a Video --"
+        cam1_source = None
+        st.sidebar.info("👈 Choose a video or upload CCTV footage above.")
 
 elif is_multi_cam:
     st.sidebar.markdown("---")
@@ -225,6 +250,7 @@ elif is_multi_cam:
     dual_mode = st.sidebar.selectbox(
         "Choose Video Feed Pair:",
         [
+            "-- Choose a Dual Video Feed --",
             "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)",
             "🔬 Preset 2: EPFL Research Benchmark (Laboratory Walkway)",
             "📁 Upload Custom Dual Video Files"
@@ -239,7 +265,12 @@ elif is_multi_cam:
         st.session_state.gallery_data = {}
         st.session_state.last_dual_mode = dual_mode
 
-    if dual_mode == "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)":
+    if dual_mode == "-- Choose a Dual Video Feed --":
+        cam1_source = None
+        cam2_source = None
+        st.sidebar.info("👈 Choose a dual-camera preset or upload videos above.")
+
+    elif dual_mode == "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)":
         cam1_source = os.path.join("videos", "mart_cam1_aisle.mp4")
         cam2_source = os.path.join("videos", "mart_cam2_counter.mp4")
         st.sidebar.success("✅ **Retail Mart CCTV Active**: Aisle + Cashier Counter")
@@ -334,13 +365,18 @@ if cam1_source and isinstance(cam1_source, str) and os.path.exists(cam1_source):
         _cap_meta.release()
 
 if col_start.button("Start Feed", use_container_width=True, type="primary"):
-    # If video reached the end earlier, reset to start
-    if st.session_state.current_frame_pos >= total_frames - 5:
-        st.session_state.current_frame_pos = 0
-        st.session_state.scrubber_pos = 0.0
-        st.session_state.last_scrub_input = 0.0
-        st.session_state.timeline_scrubber_slider = 0.0
-    st.session_state.is_running = True
+    if is_cctv_file and cam1_source is None:
+        st.sidebar.warning("⚠️ Please choose or upload a video in the sidebar first.")
+    elif is_multi_cam and (cam1_source is None or cam2_source is None):
+        st.sidebar.warning("⚠️ Please choose a dual-camera video pair in the sidebar first.")
+    else:
+        # If video reached the end earlier, reset to start
+        if st.session_state.current_frame_pos >= total_frames - 5:
+            st.session_state.current_frame_pos = 0
+            st.session_state.scrubber_pos = 0.0
+            st.session_state.last_scrub_input = 0.0
+            st.session_state.timeline_scrubber_slider = 0.0
+        st.session_state.is_running = True
 
 if col_stop.button("Stop Feed", use_container_width=True):
     st.session_state.is_running = False
@@ -385,67 +421,91 @@ st.markdown("---")
 if is_cctv_file:
     st.subheader("🎥 Surveillance Feed: Live Multi-Person Tracking & Forensic Re-ID")
     if cam1_source is None:
-        st.info("👈 **Please upload your surveillance video (.mp4, .avi, .mov) in the left sidebar to start.**")
-
-    # Video Display Container
-    video_placeholder1 = st.empty()
-    video_placeholder2 = None
-
-    with st.container(key="in_video_controls"):
-        current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
-
-        # Callback for scrubber click/drag seeking
-        def on_timeline_scrub():
-            scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
-            st.session_state.current_frame_pos = int(scrub_val * video_fps)
-            st.session_state.scrubber_pos = scrub_val
-            st.session_state.last_scrub_input = scrub_val
-            st.session_state.is_running = True
-            if "pipeline" in st.session_state and st.session_state.pipeline is not None:
-                st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
-
-        # 1. Edge-to-Edge In-Video Scrubber Slider (The Single Clean Video Timeline)
-        scrub_sec = st.slider(
-            "Timeline",
-            min_value=0.0,
-            max_value=float(round(total_sec, 1)),
-            value=current_time_val,
-            step=0.5,
-            format="%.1fs",
-            key="timeline_scrubber_slider",
-            label_visibility="collapsed",
-            on_change=on_timeline_scrub,
-            help="Click or drag anywhere on this timeline bar to scrub forward or backward."
+        video_placeholder1 = st.empty()
+        video_placeholder2 = None
+        timecode_placeholder = None
+        status_placeholder = None
+        video_placeholder1.markdown(
+            """
+            <div style="
+                border: 2px dashed rgba(255, 255, 255, 0.2);
+                border-radius: 12px;
+                padding: 65px 20px;
+                text-align: center;
+                background: rgba(15, 23, 42, 0.45);
+                color: #94a3b8;
+                margin-top: 15px;
+                margin-bottom: 25px;
+            ">
+                <div style="font-size: 52px; margin-bottom: 14px;">📹</div>
+                <h3 style="color: #f8fafc; margin-bottom: 8px; font-weight: 600;">No Video Selected</h3>
+                <p style="font-size: 14px; color: #94a3b8; max-width: 520px; margin: 0 auto; line-height: 1.6;">
+                    👈 Please select <strong>"Choose Video Footage"</strong> in the left sidebar to upload your video file or load a demo feed.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
         )
+    else:
+        # Video Display Container
+        video_placeholder1 = st.empty()
+        video_placeholder2 = None
 
-        # 2. In-Video Control Row: [Pause/Resume button] [Live Timecode] [AI Status]
-        ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([1.3, 4.2, 2.5])
-        with ctrl_c1:
-            is_active = st.session_state.is_running
-            btn_play_pause = st.button(
-                "⏸️ Pause" if is_active else "▶️ Resume",
-                key="btn_in_video_toggle",
-                use_container_width=True
+        with st.container(key="in_video_controls"):
+            current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
+
+            # Callback for scrubber click/drag seeking
+            def on_timeline_scrub():
+                scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
+                st.session_state.current_frame_pos = int(scrub_val * video_fps)
+                st.session_state.scrubber_pos = scrub_val
+                st.session_state.last_scrub_input = scrub_val
+                st.session_state.is_running = True
+                if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                    st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+
+            # 1. Edge-to-Edge In-Video Scrubber Slider (The Single Clean Video Timeline)
+            scrub_sec = st.slider(
+                "Timeline",
+                min_value=0.0,
+                max_value=float(round(total_sec, 1)),
+                value=current_time_val,
+                step=0.5,
+                format="%.1fs",
+                key="timeline_scrubber_slider",
+                label_visibility="collapsed",
+                on_change=on_timeline_scrub,
+                help="Click or drag anywhere on this timeline bar to scrub forward or backward."
             )
-            if btn_play_pause:
-                if st.session_state.is_running:
-                    st.session_state.is_running = False
-                else:
-                    if st.session_state.current_frame_pos >= total_frames - 5:
-                        st.session_state.current_frame_pos = 0
-                        st.session_state.scrubber_pos = 0.0
-                        st.session_state.last_scrub_input = 0.0
-                    st.session_state.is_running = True
-                st.rerun()
 
-        with ctrl_c2:
-            timecode_placeholder = st.empty()
+            # 2. In-Video Control Row: [Pause/Resume button] [Live Timecode] [AI Status]
+            ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([1.3, 4.2, 2.5])
+            with ctrl_c1:
+                is_active = st.session_state.is_running
+                btn_play_pause = st.button(
+                    "⏸️ Pause" if is_active else "▶️ Resume",
+                    key="btn_in_video_toggle",
+                    use_container_width=True
+                )
+                if btn_play_pause:
+                    if st.session_state.is_running:
+                        st.session_state.is_running = False
+                    else:
+                        if st.session_state.current_frame_pos >= total_frames - 5:
+                            st.session_state.current_frame_pos = 0
+                            st.session_state.scrubber_pos = 0.0
+                            st.session_state.last_scrub_input = 0.0
+                        st.session_state.is_running = True
+                    st.rerun()
 
-        with ctrl_c3:
-            status_placeholder = st.empty()
+            with ctrl_c2:
+                timecode_placeholder = st.empty()
 
-    if "last_scrub_input" not in st.session_state:
-        st.session_state.last_scrub_input = current_time_val
+            with ctrl_c3:
+                status_placeholder = st.empty()
+
+        if "last_scrub_input" not in st.session_state:
+            st.session_state.last_scrub_input = current_time_val
 
 elif is_live_stream:
     st.subheader("🔴 Live Camera Feed: Real-Time Person Detection & Re-ID")
@@ -465,15 +525,42 @@ else:  # is_multi_cam
         cam1_title = "Camera 01: Surveillance View A"
         cam2_title = "Camera 02: Surveillance View B"
 
-    feed_col1, feed_col2 = st.columns(2)
-    with feed_col1:
-        st.subheader(cam1_title)
+    if cam1_source is None or cam2_source is None:
         video_placeholder1 = st.empty()
-    with feed_col2:
-        st.subheader(cam2_title)
-        video_placeholder2 = st.empty()
-    timecode_placeholder = None
-    status_placeholder = None
+        video_placeholder2 = None
+        timecode_placeholder = None
+        status_placeholder = None
+        video_placeholder1.markdown(
+            """
+            <div style="
+                border: 2px dashed rgba(255, 255, 255, 0.2);
+                border-radius: 12px;
+                padding: 65px 20px;
+                text-align: center;
+                background: rgba(15, 23, 42, 0.45);
+                color: #94a3b8;
+                margin-top: 15px;
+                margin-bottom: 25px;
+            ">
+                <div style="font-size: 52px; margin-bottom: 14px;">📹</div>
+                <h3 style="color: #f8fafc; margin-bottom: 8px; font-weight: 600;">No Dual-Camera Feed Selected</h3>
+                <p style="font-size: 14px; color: #94a3b8; max-width: 520px; margin: 0 auto; line-height: 1.6;">
+                    👈 Please select <strong>"Choose Video Feed Pair"</strong> in the left sidebar to load synchronized store feeds or upload custom dual videos.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        feed_col1, feed_col2 = st.columns(2)
+        with feed_col1:
+            st.subheader(cam1_title)
+            video_placeholder1 = st.empty()
+        with feed_col2:
+            st.subheader(cam2_title)
+            video_placeholder2 = st.empty()
+        timecode_placeholder = None
+        status_placeholder = None
 
 # Surveillance Data Tabs
 st.markdown("---")
