@@ -67,17 +67,21 @@ div[data-testid="stImage"] img {
 }
 
 /* Modern Video Player Controls Bar */
+.st-key-in_video_player_bar,
+.st-key-in_video_player_bar_multi,
 .st-key-in_video_controls {
     background: #0f172a !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     border-radius: 10px !important;
-    padding: 6px 16px 10px 16px !important;
-    margin-top: 8px !important;
-    margin-bottom: 20px !important;
+    padding: 6px 16px 8px 16px !important;
+    max-width: 640px !important;
+    margin: 8px auto 20px auto !important;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Single Video Player Scrubber Timeline (Only ONE bar on screen) */
+.st-key-in_video_player_bar div[data-testid="stSlider"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"],
 .st-key-in_video_controls div[data-testid="stSlider"] {
     margin-top: 0px !important;
     margin-bottom: -10px !important;
@@ -88,6 +92,10 @@ div[data-testid="stImage"] img {
 }
 
 /* Scrubber Track: 6px sleek track */
+.st-key-in_video_player_bar div[data-testid="stSlider"] div[class*="e13xtgje5"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] [data-orientation="horizontal"] > div > div:first-child,
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] div[class*="e13xtgje5"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [data-orientation="horizontal"] > div > div:first-child,
 .st-key-in_video_controls div[data-testid="stSlider"] div[class*="e13xtgje5"],
 .st-key-in_video_controls div[data-testid="stSlider"] [data-orientation="horizontal"] > div > div:first-child {
     background: rgba(255, 255, 255, 0.22) !important;
@@ -96,6 +104,16 @@ div[data-testid="stImage"] img {
 }
 
 /* Hide all slider labels, ticks, and text values for clean video player look */
+.st-key-in_video_player_bar div[data-testid="stSlider"] label,
+.st-key-in_video_player_bar div[data-testid="stSlider"] [data-testid="stSliderTickBar"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] [data-testid="stSliderTickBarMin"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] [data-testid="stSliderTickBarMax"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] [data-testid="stSliderThumbValue"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] label,
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [data-testid="stSliderTickBar"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [data-testid="stSliderTickBarMin"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [data-testid="stSliderTickBarMax"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [data-testid="stSliderThumbValue"],
 .st-key-in_video_controls div[data-testid="stSlider"] label,
 .st-key-in_video_controls div[data-testid="stSlider"] [data-testid="stSliderTickBar"],
 .st-key-in_video_controls div[data-testid="stSlider"] [data-testid="stSliderTickBarMin"],
@@ -105,6 +123,12 @@ div[data-testid="stImage"] img {
 }
 
 /* Force pointer cursor on hover anywhere over the timeline bar */
+.st-key-in_video_player_bar div[data-testid="stSlider"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] *,
+.st-key-in_video_player_bar div[data-testid="stSlider"] div,
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] *,
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] div,
 .st-key-in_video_controls div[data-testid="stSlider"],
 .st-key-in_video_controls div[data-testid="stSlider"] *,
 .st-key-in_video_controls div[data-testid="stSlider"] div {
@@ -112,6 +136,10 @@ div[data-testid="stImage"] img {
 }
 
 /* Scrubber Thumb (Glowing Red Circle) */
+.st-key-in_video_player_bar div[data-testid="stSlider"] div[data-rac][style*="left"],
+.st-key-in_video_player_bar div[data-testid="stSlider"] [role="slider"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] div[data-rac][style*="left"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"] [role="slider"],
 .st-key-in_video_controls div[data-testid="stSlider"] div[data-rac][style*="left"],
 .st-key-in_video_controls div[data-testid="stSlider"] [role="slider"] {
     background-color: #ff2222 !important;
@@ -122,6 +150,10 @@ div[data-testid="stImage"] img {
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
+.st-key-in_video_player_bar div[data-testid="stSlider"]:hover div[data-rac][style*="left"],
+.st-key-in_video_player_bar div[data-testid="stSlider"]:hover [role="slider"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"]:hover div[data-rac][style*="left"],
+.st-key-in_video_player_bar_multi div[data-testid="stSlider"]:hover [role="slider"],
 .st-key-in_video_controls div[data-testid="stSlider"]:hover div[data-rac][style*="left"],
 .st-key-in_video_controls div[data-testid="stSlider"]:hover [role="slider"] {
     transform: translate(-50%, -50%) scale(1.35) !important;
@@ -129,6 +161,8 @@ div[data-testid="stImage"] img {
 }
 
 /* In-Video Buttons */
+.st-key-in_video_player_bar button,
+.st-key-in_video_player_bar_multi button,
 .st-key-in_video_controls button {
     background: rgba(255, 255, 255, 0.14) !important;
     border: 1px solid rgba(255, 255, 255, 0.28) !important;
@@ -144,6 +178,8 @@ div[data-testid="stImage"] img {
     transition: all 0.2s ease !important;
 }
 
+.st-key-in_video_player_bar button:hover,
+.st-key-in_video_player_bar_multi button:hover,
 .st-key-in_video_controls button:hover {
     background: #ff3b3b !important;
     border-color: #ff3b3b !important;
@@ -163,22 +199,23 @@ def prep_frame(img, max_w=640):
         img = cv2.resize(img, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-def render_video_frame(placeholder, frame_bgr, max_w=540):
+def render_video_frame(placeholder, frame_bgr, max_w=640):
     """
     Renders video frames directly into Streamlit DOM via lightweight Base64 Data URI.
-    Uses placeholder.html to bypass Markdown parser overhead for maximum fluidity.
+    Constrained to max-width: 640px centered, with high quality JPEG encoding (82)
+    and INTER_AREA downsampling for razor-sharp rendering without blur or pixelation.
     """
     if placeholder is None or frame_bgr is None:
         return
     h, w = frame_bgr.shape[:2]
     if w > max_w:
         scale = max_w / float(w)
-        frame_bgr = cv2.resize(frame_bgr, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
-    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
+        frame_bgr = cv2.resize(frame_bgr, (max_w, int(h * scale)), interpolation=cv2.INTER_AREA)
+    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
     if ret:
         b64 = base64.b64encode(buf).decode('ascii')
         html_code = (
-            f'<div style="width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); line-height: 0;">'
+            f'<div style="max-width: 640px; width: 100%; margin: 0 auto; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); line-height: 0;">'
             f'<img src="data:image/jpeg;base64,{b64}" style="width: 100%; height: auto; display: block;" />'
             f'</div>'
         )
@@ -209,8 +246,8 @@ def render_timeline_bar(placeholder, current_frame, total_frames, video_fps, is_
         status_badge = '<span style="color: #fbbf24; font-weight: 500;">⏸️ Paused</span>'
 
     html_code = (
-        f'<div style="width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 7px 12px; margin-top: 1px; margin-bottom: 2px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">'
-        f'<div style="position: relative; width: 100%; height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; margin-bottom: 6px; overflow: visible;">'
+        f'<div style="width: 100%; background: transparent; padding: 2px 0; margin-top: 1px; margin-bottom: 2px;">'
+        f'<div style="position: relative; width: 100%; height: 8px; background: rgba(255,255,255,0.18); border-radius: 4px; margin-bottom: 6px; overflow: visible;">'
         f'<div style="position: absolute; left: 0; top: 0; width: {pct:.2f}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f43f5e); border-radius: 4px; box-shadow: 0 0 10px rgba(239,68,68,0.6);"></div>'
         f'<div style="position: absolute; left: calc({pct:.2f}% - 6px); top: -3px; width: 14px; height: 14px; background: #ffffff; border: 3px solid #ef4444; border-radius: 50%; box-shadow: 0 0 8px rgba(239,68,68,0.9); pointer-events: none;"></div>'
         f'</div>'
@@ -515,8 +552,8 @@ if is_cctv_file:
                 text-align: center;
                 background: rgba(15, 23, 42, 0.45);
                 color: #94a3b8;
-                margin-top: 15px;
-                margin-bottom: 25px;
+                max-width: 640px;
+                margin: 15px auto 25px auto;
             ">
                 <div style="font-size: 52px; margin-bottom: 14px;">📹</div>
                 <h3 style="color: #f8fafc; margin-bottom: 8px; font-weight: 600;">No Video Selected</h3>
@@ -536,7 +573,7 @@ if is_cctv_file:
 
         # Unified Single Player Bar: Dynamic Pause/Resume on Left + Single Seekable Timeline on Right
         with st.container(key="in_video_player_bar"):
-            c_ctrl, c_timeline = st.columns([1.5, 8.5])
+            c_ctrl, c_timeline = st.columns([2.0, 8.0])
 
             with c_ctrl:
                 is_active = st.session_state.is_running
@@ -654,7 +691,7 @@ else:  # is_multi_cam
         status_placeholder = None
 
         with st.container(key="in_video_player_bar_multi"):
-            c_ctrl_m, c_tl_m = st.columns([1.5, 8.5])
+            c_ctrl_m, c_tl_m = st.columns([2.0, 8.0])
             with c_ctrl_m:
                 is_active = st.session_state.is_running
                 btn_label = "⏸️ Pause" if is_active else ("▶️ Resume" if st.session_state.current_frame_pos > 0 else "▶️ Start")
@@ -876,7 +913,7 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=540)
+                    render_video_frame(video_placeholder1, ann1, max_w=640)
 
                     # Update in-video control bar timecode and live AI tracking status
                     cur_f = int(cap1.get(cv2.CAP_PROP_POS_FRAMES))
@@ -956,7 +993,7 @@ if st.session_state.is_running:
                             fps_history.pop(0)
                         avg_fps = sum(fps_history) / len(fps_history)
 
-                        render_video_frame(video_placeholder1, ann1, max_w=540)
+                        render_video_frame(video_placeholder1, ann1, max_w=640)
 
                         # Update metrics on every frame
                         m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
@@ -1035,8 +1072,8 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=540)
-                    render_video_frame(video_placeholder2, ann2, max_w=540)
+                    render_video_frame(video_placeholder1, ann1, max_w=640)
+                    render_video_frame(video_placeholder2, ann2, max_w=640)
 
                     if frame_idx % 2 == 0 and timeline_placeholder is not None:
                         render_timeline_bar(
@@ -1077,7 +1114,7 @@ else:
         cap_prev.set(cv2.CAP_PROP_POS_FRAMES, pos)
         r, f = cap_prev.read()
         if r and f is not None:
-            render_video_frame(video_placeholder1, f, max_w=540)
+            render_video_frame(video_placeholder1, f, max_w=640)
             if timeline_placeholder is not None:
                 render_timeline_bar(
                     timeline_placeholder,
@@ -1096,9 +1133,9 @@ else:
             r1, f1 = cp1.read()
             r2, f2 = cp2.read()
             if r1 and f1 is not None and video_placeholder1:
-                render_video_frame(video_placeholder1, f1, max_w=540)
+                render_video_frame(video_placeholder1, f1, max_w=640)
             if r2 and f2 is not None and video_placeholder2:
-                render_video_frame(video_placeholder2, f2, max_w=540)
+                render_video_frame(video_placeholder2, f2, max_w=640)
             cp1.release()
             cp2.release()
         st.info("Click **Start Feed** in the sidebar to run inference and record transitions.")
