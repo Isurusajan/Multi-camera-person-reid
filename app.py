@@ -435,29 +435,6 @@ else:  # Live Camera Stream (Webcam / IP Camera)
         st.sidebar.caption("🌐 Ready to connect to network IP camera.")
     cam2_source = None
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Model Parameters")
-conf_threshold = st.sidebar.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
-reid_threshold = st.sidebar.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
-st.sidebar.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
-
-playback_speed = st.sidebar.selectbox(
-    "⚡ Video Playback Rate",
-    ["1.0x (Real-Time Natural)", "1.25x (Fast)", "1.5x (Turbo)", "Max Hardware Speed"],
-    index=0,
-    help="1.0x matches original surveillance video recording speed. Higher speeds process frames faster."
-)
-speed_mult = 1.0
-if "1.25x" in playback_speed:
-    speed_mult = 1.25
-elif "1.5x" in playback_speed:
-    speed_mult = 1.5
-elif "Max" in playback_speed:
-    speed_mult = 999.0
-
-st.sidebar.markdown("---")
-col_start, col_stop = st.sidebar.columns(2)
-
 # Persistent Session State
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
@@ -472,7 +449,7 @@ if "scrubber_pos" not in st.session_state:
 if "timeline_scrubber_slider" not in st.session_state:
     st.session_state.timeline_scrubber_slider = 0.0
 
-# Extract Video Metadata if source is available
+# Extract Video Metadata immediately so total_frames & video_fps are ready
 total_frames = 1
 video_fps = 30.0
 total_sec = 1.0
@@ -485,7 +462,12 @@ if cam1_source and isinstance(cam1_source, str) and os.path.exists(cam1_source):
         total_sec = max(1.0, total_frames / video_fps)
         _cap_meta.release()
 
-if col_start.button("Start Feed", use_container_width=True, type="primary"):
+# Primary Action Controls (Placed immediately below video selection: ZERO SCROLLING REQUIRED!)
+st.sidebar.markdown("---")
+st.sidebar.subheader("⚡ Feed Controls")
+col_start, col_stop = st.sidebar.columns(2)
+
+if col_start.button("▶️ Start Feed", use_container_width=True, type="primary"):
     if is_cctv_file and cam1_source is None:
         st.sidebar.warning("⚠️ Please choose or upload a video in the sidebar first.")
     elif is_multi_cam and (cam1_source is None or cam2_source is None):
@@ -498,10 +480,12 @@ if col_start.button("Start Feed", use_container_width=True, type="primary"):
             st.session_state.last_scrub_input = 0.0
             st.session_state.timeline_scrubber_slider = 0.0
         st.session_state.is_running = True
+        st.rerun()
 
-if col_stop.button("Stop Feed", use_container_width=True):
+if col_stop.button("⏸️ Stop Feed", use_container_width=True):
     st.session_state.is_running = False
     st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
+    st.rerun()
 
 if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
     st.session_state.is_running = False
@@ -514,6 +498,27 @@ if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
     st.session_state.last_scrub_input = 0.0
     st.session_state.timeline_scrubber_slider = 0.0
     st.rerun()
+
+# Model Parameters & Speed Controls (Cleanly grouped in compact expander below action buttons)
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚙️ AI & Playback Settings", expanded=False):
+    playback_speed = st.selectbox(
+        "⚡ Video Playback Rate",
+        ["1.5x (Smooth & Fast - Recommended)", "1.0x (Normal Real-Time)", "2.0x (Turbo)", "Max Hardware Speed"],
+        index=0,
+        help="1.5x delivers fast, fluid video playback without slow-motion lag."
+    )
+    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
+    reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
+    st.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
+
+speed_mult = 1.5
+if "1.0x" in playback_speed:
+    speed_mult = 1.0
+elif "2.0x" in playback_speed:
+    speed_mult = 2.0
+elif "Max" in playback_speed:
+    speed_mult = 999.0
 
 # Real-Time KPI Metrics Bar
 if not is_multi_cam:
@@ -593,38 +598,40 @@ if is_cctv_file:
             with c_timeline:
                 timeline_placeholder = st.empty()
                 if not st.session_state.is_running:
-                    # When paused, render the interactive draggable timeline so user can scrub back & forth!
-                    current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
+                    # When paused, render the interactive draggable timeline INSIDE timeline_placeholder
+                    with timeline_placeholder.container():
+                        current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
 
-                    def on_timeline_scrub():
-                        scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
-                        st.session_state.current_frame_pos = int(scrub_val * video_fps)
-                        st.session_state.scrubber_pos = scrub_val
-                        if "pipeline" in st.session_state and st.session_state.pipeline is not None:
-                            st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+                        def on_timeline_scrub():
+                            scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
+                            st.session_state.current_frame_pos = int(scrub_val * video_fps)
+                            st.session_state.scrubber_pos = scrub_val
+                            if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                                st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
 
-                    st.slider(
-                        "Timeline",
-                        min_value=0.0,
-                        max_value=float(round(total_sec, 1)),
-                        value=current_time_val,
-                        step=0.5,
-                        format="%.1fs",
-                        key="timeline_scrubber_slider",
-                        label_visibility="collapsed",
-                        on_change=on_timeline_scrub,
-                        help="Drag anywhere on this timeline to seek forward or backward."
-                    )
-                    cur_m, cur_s = int(current_time_val // 60), int(current_time_val % 60)
-                    tot_m, tot_s = int(total_sec // 60), int(total_sec % 60)
-                    pct = (st.session_state.current_frame_pos / float(total_frames)) * 100.0 if total_frames > 0 else 0.0
-                    st.caption(
-                        f"⏱️ **{cur_m:02d}:{cur_s:02d} / {tot_m:02d}:{tot_s:02d}** "
-                        f"(Frame {st.session_state.current_frame_pos}/{total_frames} · {pct:.1f}%) · "
-                        f"⏸️ *Paused (Drag slider to seek)*"
-                    )
+                        st.slider(
+                            "Timeline",
+                            min_value=0.0,
+                            max_value=float(round(total_sec, 1)),
+                            value=current_time_val,
+                            step=0.5,
+                            format="%.1fs",
+                            key="timeline_scrubber_slider",
+                            label_visibility="collapsed",
+                            on_change=on_timeline_scrub,
+                            help="Drag anywhere on this timeline to seek forward or backward."
+                        )
+                        cur_m, cur_s = int(current_time_val // 60), int(current_time_val % 60)
+                        tot_m, tot_s = int(total_sec // 60), int(total_sec % 60)
+                        pct = (st.session_state.current_frame_pos / float(total_frames)) * 100.0 if total_frames > 0 else 0.0
+                        st.caption(
+                            f"⏱️ **{cur_m:02d}:{cur_s:02d} / {tot_m:02d}:{tot_s:02d}** "
+                            f"(Frame {st.session_state.current_frame_pos}/{total_frames} · {pct:.1f}%) · "
+                            f"⏸️ *Paused (Drag slider to seek)*"
+                        )
                 else:
-                    # When playing, render initial live moving timeline state
+                    # When playing, render initial live moving timeline state replacing timeline_placeholder
+                    timeline_placeholder.empty()
                     render_timeline_bar(
                         timeline_placeholder,
                         st.session_state.current_frame_pos,
@@ -921,7 +928,7 @@ if st.session_state.is_running:
                     cur_s = cur_f / video_fps
 
                     # Smooth live timeline update in exact real-time sync with video playback
-                    if frame_idx % 2 == 0 and timeline_placeholder is not None:
+                    if frame_idx % 3 == 0 and timeline_placeholder is not None:
                         render_timeline_bar(
                             timeline_placeholder,
                             cur_f,
@@ -931,26 +938,26 @@ if st.session_state.is_running:
                             avg_fps=avg_fps
                         )
 
-                    # Update active in view on every frame so exit/clearance reflects immediately
-                    m_active.metric("Active in Camera View", len(objs1))
-
-                    if frame_idx % 4 == 0:
+                    # Update all KPI metrics together every 5 frames to maximize WebSocket throughput & eliminate stutter
+                    if frame_idx % 5 == 0:
+                        m_active.metric("Active in Camera View", len(objs1))
                         total_unique = len(pipeline.gallery.identities)
                         m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
                     # Calm tab update during active streaming (skips expensive forensic mugshot expanders)
-                    if frame_idx % 35 == 0:
+                    if frame_idx % 40 == 0:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
-                    elapsed = time.perf_counter() - t_start
-                    sleep_time = max(0.0, target_delay - elapsed)
-                    if sleep_time > 0.001:
-                        time.sleep(sleep_time)
+                    if speed_mult < 999.0:
+                        target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
+                        elapsed = time.perf_counter() - t_start
+                        sleep_time = max(0.0, target_delay - elapsed)
+                        if sleep_time > 0.003:
+                            time.sleep(sleep_time)
             finally:
                 cap1.release()
 
@@ -1075,7 +1082,7 @@ if st.session_state.is_running:
                     render_video_frame(video_placeholder1, ann1, max_w=640)
                     render_video_frame(video_placeholder2, ann2, max_w=640)
 
-                    if frame_idx % 2 == 0 and timeline_placeholder is not None:
+                    if frame_idx % 3 == 0 and timeline_placeholder is not None:
                         render_timeline_bar(
                             timeline_placeholder,
                             frame_idx,
@@ -1092,17 +1099,18 @@ if st.session_state.is_running:
                         m_cam2.metric("Active in Camera 02", len(objs2))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    if frame_idx % 35 == 0:
+                    if frame_idx % 40 == 0:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
-                    elapsed = time.perf_counter() - t_start
-                    sleep_time = max(0.0, target_delay - elapsed)
-                    if sleep_time > 0.001:
-                        time.sleep(sleep_time)
+                    if speed_mult < 999.0:
+                        target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
+                        elapsed = time.perf_counter() - t_start
+                        sleep_time = max(0.0, target_delay - elapsed)
+                        if sleep_time > 0.003:
+                            time.sleep(sleep_time)
             finally:
                 cap1.release()
                 cap2.release()
