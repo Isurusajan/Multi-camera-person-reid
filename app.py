@@ -301,14 +301,12 @@ if is_cctv_file:
         "Choose Video Footage:",
         [
             "-- Choose a Video --",
-            "🏪 Demo 1: Store Interior Aisle (Yellow Jacket Person)",
-            "🚶 Demo 2: Street Sidewalk Outside (Yellow Jacket Person)",
-            "🛒 Demo 3: Store Checkout Counter",
-            "🍿 Demo 4: Retail Mart Snack Aisle",
             "📁 Upload CCTV Video File (.mp4, .avi)",
+            "🏪 Demo 1: Store Checkout Counter",
+            "🛒 Demo 2: Retail Mart Snack Aisle",
         ],
         index=0,
-        help="Select '-- Choose a Video --' to start empty, choose a demo footage, or upload your own video"
+        help="Select '-- Choose a Video --' to start empty, upload your own video, or select a demo footage"
     )
 
     if video_source_option == "📁 Upload CCTV Video File (.mp4, .avi)":
@@ -336,25 +334,13 @@ if is_cctv_file:
             cam1_source = None
             st.sidebar.info("👈 Please select or drag a video file to upload.")
 
-    elif video_source_option == "🏪 Demo 1: Store Interior Aisle (Yellow Jacket Person)":
-        inside_path = os.path.join("videos", "street_store_cam1_inside.mp4")
-        if os.path.exists(inside_path):
-            cam1_source = inside_path
-            st.sidebar.success("📹 Loaded: Store Interior Aisle Surveillance (Person in Yellow Jacket)")
-
-    elif video_source_option == "🚶 Demo 2: Street Sidewalk Outside (Yellow Jacket Person)":
-        outside_path = os.path.join("videos", "street_store_cam2_outside.mp4")
-        if os.path.exists(outside_path):
-            cam1_source = outside_path
-            st.sidebar.success("📹 Loaded: Street Sidewalk Outside Storefront (Person in Yellow Jacket)")
-
-    elif video_source_option == "🛒 Demo 3: Store Checkout Counter":
+    elif video_source_option == "🏪 Demo 1: Store Checkout Counter":
         cctv_path = os.path.join("videos", "cctv_single_feed.mp4")
         if os.path.exists(cctv_path):
             cam1_source = cctv_path
             st.sidebar.success("📹 Loaded: Store Checkout Counter Surveillance")
 
-    elif video_source_option == "🍿 Demo 4: Retail Mart Snack Aisle":
+    elif video_source_option == "🛒 Demo 2: Retail Mart Snack Aisle":
         mart_path = os.path.join("videos", "mart_cam1_aisle.mp4")
         if os.path.exists(mart_path):
             cam1_source = mart_path
@@ -372,13 +358,12 @@ elif is_multi_cam:
         "Choose Video Feed Pair:",
         [
             "-- Choose a Dual Video Feed --",
-            "🏪 Preset 1: Store & Street Network (Identical Person - Yellow Jacket)",
-            "🛒 Preset 2: Retail Mart Surveillance (Aisle & Cashier Counter)",
-            "🔬 Preset 3: EPFL Research Benchmark (Laboratory Walkway)",
+            "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)",
+            "🔬 Preset 2: EPFL Research Benchmark (Laboratory Walkway)",
             "📁 Upload Custom Dual Video Files"
         ],
         index=0,
-        help="Select synchronized dual-camera feeds featuring the same person inside and outside!"
+        help="Choose between synchronized real-world store CCTV feeds or research benchmark pairs!"
     )
 
     if st.session_state.get("last_dual_mode") != dual_mode:
@@ -392,19 +377,13 @@ elif is_multi_cam:
         cam2_source = None
         st.sidebar.info("👈 Choose a dual-camera preset or upload videos above.")
 
-    elif dual_mode == "🏪 Preset 1: Store & Street Network (Identical Person - Yellow Jacket)":
-        cam1_source = os.path.join("videos", "street_store_cam1_inside.mp4")
-        cam2_source = os.path.join("videos", "street_store_cam2_outside.mp4")
-        st.sidebar.success("✅ **Store & Street CCTV Active**: Inside Store + Outside Sidewalk")
-        st.sidebar.caption("🏪 Shows the exact same person (Yellow Jacket) walking inside the store (Cam 1) and walking outside on the street (Cam 2) with clear face Re-ID!")
-
-    elif dual_mode == "🛒 Preset 2: Retail Mart Surveillance (Aisle & Cashier Counter)":
+    elif dual_mode == "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)":
         cam1_source = os.path.join("videos", "mart_cam1_aisle.mp4")
         cam2_source = os.path.join("videos", "mart_cam2_counter.mp4")
         st.sidebar.success("✅ **Retail Mart CCTV Active**: Aisle + Cashier Counter")
         st.sidebar.caption("🛒 Real-world store CCTV: Identical customers shopping in snack aisle (Cam 1) and checking out at cashier (Cam 2).")
 
-    elif dual_mode == "🔬 Preset 3: EPFL Research Benchmark (Laboratory Walkway)":
+    elif dual_mode == "🔬 Preset 2: EPFL Research Benchmark (Laboratory Walkway)":
         cam1_source = os.path.join("videos", "reid_cam1.mp4")
         cam2_source = os.path.join("videos", "reid_cam2.mp4")
         st.sidebar.success("✅ **Benchmark Active**: EPFL Multi-Cam Lab")
@@ -486,6 +465,32 @@ if cam1_source and isinstance(cam1_source, str) and os.path.exists(cam1_source):
 # Primary Action Controls (Placed immediately below video selection: ZERO SCROLLING REQUIRED!)
 st.sidebar.markdown("---")
 st.sidebar.subheader("⚡ Feed Controls")
+
+playback_speed = st.sidebar.select_slider(
+    "⚡ Playback Speed (Fast-Forward):",
+    options=["1x Real-Time", "2x Fast", "3x Turbo", "4x Blazing", "5x Hyper"],
+    value="2x Fast",
+    help="Fast-forward video footage with smart hardware frame-skipping for rapid analysis & recording!"
+)
+
+speed_mult = 2.0
+frame_step = 2
+if "1x" in playback_speed:
+    speed_mult = 1.0
+    frame_step = 1
+elif "2x" in playback_speed:
+    speed_mult = 2.0
+    frame_step = 2
+elif "3x" in playback_speed:
+    speed_mult = 3.0
+    frame_step = 3
+elif "4x" in playback_speed:
+    speed_mult = 4.0
+    frame_step = 4
+elif "5x" in playback_speed:
+    speed_mult = 5.0
+    frame_step = 5
+
 col_start, col_stop = st.sidebar.columns(2)
 
 if col_start.button("▶️ Start Feed", use_container_width=True, type="primary"):
@@ -520,39 +525,12 @@ if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
     st.session_state.timeline_scrubber_slider = 0.0
     st.rerun()
 
-# Model Parameters & Speed Controls (Cleanly grouped in compact expander below action buttons)
+# Model Parameters Tuning (Grouped in compact expander below action buttons)
 st.sidebar.markdown("---")
-with st.sidebar.expander("⚙️ AI & Playback Settings", expanded=False):
-    playback_speed = st.selectbox(
-        "⚡ Video Playback Speed",
-        [
-            "⚡ 2.0x Fast Forward (Skip 1 frame - Fast & Fluid)",
-            "⚡ 1.5x Smooth Fast (Adaptive Frame Stride)",
-            "🎯 1.0x Real-Time (Process Every Frame)",
-            "🚀 3.0x Ultra-Fast (Skip 2 frames - High Speed)",
-            "🏎️ 4.0x Max Turbo (Skip 3 frames - Fastest)"
-        ],
-        index=0,
-        help="Higher speeds skip intermediate frames using hardware seeking, advancing through footage 2x - 4x faster!"
-    )
+with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
     conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
     reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
     st.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
-
-speed_mult = 2.0
-frame_step = 2
-if "1.5x" in playback_speed:
-    speed_mult = 1.5
-    frame_step = 1.5
-elif "1.0x" in playback_speed:
-    speed_mult = 1.0
-    frame_step = 1
-elif "3.0x" in playback_speed:
-    speed_mult = 3.0
-    frame_step = 3
-elif "4.0x" in playback_speed or "Max" in playback_speed:
-    speed_mult = 4.0
-    frame_step = 4
 
 # Real-Time KPI Metrics Bar
 if not is_multi_cam:
@@ -683,10 +661,7 @@ elif is_live_stream:
     status_placeholder = None
 
 else:  # is_multi_cam
-    if dual_mode and "Store & Street" in dual_mode:
-        cam1_title = "Camera 01: Store Interior (Shop Aisle)"
-        cam2_title = "Camera 02: Street Exterior (Sidewalk)"
-    elif dual_mode and "Retail Mart" in dual_mode:
+    if dual_mode and "Retail Mart" in dual_mode:
         cam1_title = "Camera 01: Retail Mart - Snack Aisle"
         cam2_title = "Camera 02: Retail Mart - Cashier Counter"
     elif dual_mode and "EPFL" in dual_mode:
@@ -989,18 +964,9 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     # Hardware frame skip to advance video at true fast-forward speed
-                    if frame_step == 2:
-                        cap1.grab()
-                    elif frame_step == 3:
-                        cap1.grab()
-                        cap1.grab()
-                    elif frame_step == 4:
-                        cap1.grab()
-                        cap1.grab()
-                        cap1.grab()
-                    elif frame_step == 1.5:
-                        if frame_idx % 2 == 0:
-                            cap1.grab()
+                    for _ in range(int(frame_step) - 1):
+                        if not cap1.grab():
+                            break
 
                     frame_idx += 1
 
@@ -1158,22 +1124,11 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     # Synchronized dual-camera frame skip to advance video at true fast-forward speed
-                    if frame_step == 2:
-                        cap1.grab()
-                        cap2.grab()
-                    elif frame_step == 3:
-                        cap1.grab()
-                        cap1.grab()
-                        cap2.grab()
-                        cap2.grab()
-                    elif frame_step == 4:
-                        for _ in range(3):
-                            cap1.grab()
-                            cap2.grab()
-                    elif frame_step == 1.5:
-                        if frame_idx % 2 == 0:
-                            cap1.grab()
-                            cap2.grab()
+                    for _ in range(int(frame_step) - 1):
+                        r1 = cap1.grab()
+                        r2 = cap2.grab()
+                        if not r1 or not r2:
+                            break
 
                     frame_idx += 1
 
