@@ -202,8 +202,8 @@ def prep_frame(img, max_w=640):
 def render_video_frame(placeholder, frame_bgr, max_w=640):
     """
     Renders video frames directly into Streamlit DOM via lightweight Base64 Data URI.
-    Constrained to max-width: 640px centered, with high quality JPEG encoding (82)
-    and INTER_AREA downsampling for razor-sharp rendering without blur or pixelation.
+    Constrained to max-width: 640px centered, with optimized JPEG encoding (74)
+    and INTER_AREA downsampling for razor-sharp rendering with ultra-fast network transfer.
     """
     if placeholder is None or frame_bgr is None:
         return
@@ -211,7 +211,7 @@ def render_video_frame(placeholder, frame_bgr, max_w=640):
     if w > max_w:
         scale = max_w / float(w)
         frame_bgr = cv2.resize(frame_bgr, (max_w, int(h * scale)), interpolation=cv2.INTER_AREA)
-    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 74])
     if ret:
         b64 = base64.b64encode(buf).decode('ascii')
         html_code = (
@@ -503,22 +503,35 @@ if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI & Playback Settings", expanded=False):
     playback_speed = st.selectbox(
-        "⚡ Video Playback Rate",
-        ["1.5x (Smooth & Fast - Recommended)", "1.0x (Normal Real-Time)", "2.0x (Turbo)", "Max Hardware Speed"],
+        "⚡ Video Playback Speed",
+        [
+            "⚡ 2.0x Fast Forward (Skip 1 frame - Fast & Fluid)",
+            "⚡ 1.5x Smooth Fast (Adaptive Frame Stride)",
+            "🎯 1.0x Real-Time (Process Every Frame)",
+            "🚀 3.0x Ultra-Fast (Skip 2 frames - High Speed)",
+            "🏎️ 4.0x Max Turbo (Skip 3 frames - Fastest)"
+        ],
         index=0,
-        help="1.5x delivers fast, fluid video playback without slow-motion lag."
+        help="Higher speeds skip intermediate frames using hardware seeking, advancing through footage 2x - 4x faster!"
     )
     conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
     reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
     st.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
 
-speed_mult = 1.5
-if "1.0x" in playback_speed:
+speed_mult = 2.0
+frame_step = 2
+if "1.5x" in playback_speed:
+    speed_mult = 1.5
+    frame_step = 1.5
+elif "1.0x" in playback_speed:
     speed_mult = 1.0
-elif "2.0x" in playback_speed:
-    speed_mult = 2.0
-elif "Max" in playback_speed:
-    speed_mult = 999.0
+    frame_step = 1
+elif "3.0x" in playback_speed:
+    speed_mult = 3.0
+    frame_step = 3
+elif "4.0x" in playback_speed or "Max" in playback_speed:
+    speed_mult = 4.0
+    frame_step = 4
 
 # Real-Time KPI Metrics Bar
 if not is_multi_cam:
@@ -951,9 +964,25 @@ if st.session_state.is_running:
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
+                    # Hardware frame skip to advance video at true fast-forward speed
+                    if frame_step == 2:
+                        cap1.grab()
+                    elif frame_step == 3:
+                        cap1.grab()
+                        cap1.grab()
+                    elif frame_step == 4:
+                        cap1.grab()
+                        cap1.grab()
+                        cap1.grab()
+                    elif frame_step == 1.5:
+                        if frame_idx % 2 == 0:
+                            cap1.grab()
+
                     frame_idx += 1
-                    if speed_mult < 999.0:
-                        target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
+
+                    # Only throttle if running at 1.0x Real-time speed and completed faster than camera FPS
+                    if speed_mult <= 1.0:
+                        target_delay = 1.0 / max(10.0, float(video_fps))
                         elapsed = time.perf_counter() - t_start
                         sleep_time = max(0.0, target_delay - elapsed)
                         if sleep_time > 0.003:
@@ -1104,9 +1133,29 @@ if st.session_state.is_running:
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
+                    # Synchronized dual-camera frame skip to advance video at true fast-forward speed
+                    if frame_step == 2:
+                        cap1.grab()
+                        cap2.grab()
+                    elif frame_step == 3:
+                        cap1.grab()
+                        cap1.grab()
+                        cap2.grab()
+                        cap2.grab()
+                    elif frame_step == 4:
+                        for _ in range(3):
+                            cap1.grab()
+                            cap2.grab()
+                    elif frame_step == 1.5:
+                        if frame_idx % 2 == 0:
+                            cap1.grab()
+                            cap2.grab()
+
                     frame_idx += 1
-                    if speed_mult < 999.0:
-                        target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
+
+                    # Only throttle if running at 1.0x Real-time speed and completed faster than camera FPS
+                    if speed_mult <= 1.0:
+                        target_delay = 1.0 / max(10.0, float(video_fps))
                         elapsed = time.perf_counter() - t_start
                         sleep_time = max(0.0, target_delay - elapsed)
                         if sleep_time > 0.003:
