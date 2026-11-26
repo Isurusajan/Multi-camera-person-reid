@@ -136,11 +136,10 @@ def prep_frame(img, max_w=640):
         img = cv2.resize(img, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
     return cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-def render_video_frame(placeholder, frame_bgr, max_w=640):
+def render_video_frame(placeholder, frame_bgr, max_w=540):
     """
-    Renders video frames directly into Streamlit DOM via Base64 Data URI.
-    Eliminates separate HTTP GET media requests, prevents browser connection stalling,
-    and guarantees zero-freeze playback on Streamlit Community Cloud.
+    Renders video frames directly into Streamlit DOM via lightweight Base64 Data URI.
+    Uses placeholder.html to bypass Markdown parser overhead for maximum fluidity.
     """
     if placeholder is None or frame_bgr is None:
         return
@@ -148,15 +147,18 @@ def render_video_frame(placeholder, frame_bgr, max_w=640):
     if w > max_w:
         scale = max_w / float(w)
         frame_bgr = cv2.resize(frame_bgr, (max_w, int(h * scale)), interpolation=cv2.INTER_LINEAR)
-    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 72])
+    ret, buf = cv2.imencode('.jpg', frame_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 65])
     if ret:
         b64 = base64.b64encode(buf).decode('ascii')
-        placeholder.markdown(
-            f'<div style="width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);">'
+        html_code = (
+            f'<div style="width: 100%; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1); line-height: 0;">'
             f'<img src="data:image/jpeg;base64,{b64}" style="width: 100%; height: auto; display: block;" />'
-            f'</div>',
-            unsafe_allow_html=True
+            f'</div>'
         )
+        if hasattr(placeholder, "html"):
+            placeholder.html(html_code)
+        else:
+            placeholder.markdown(html_code, unsafe_allow_html=True)
 
 # Sidebar Settings
 st.sidebar.header("Stream Configuration")
@@ -333,6 +335,20 @@ st.sidebar.subheader("Model Parameters")
 conf_threshold = st.sidebar.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
 reid_threshold = st.sidebar.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
 st.sidebar.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
+
+playback_speed = st.sidebar.selectbox(
+    "⚡ Video Playback Rate",
+    ["1.0x (Real-Time Natural)", "1.25x (Fast)", "1.5x (Turbo)", "Max Hardware Speed"],
+    index=0,
+    help="1.0x matches original surveillance video recording speed. Higher speeds process frames faster."
+)
+speed_mult = 1.0
+if "1.25x" in playback_speed:
+    speed_mult = 1.25
+elif "1.5x" in playback_speed:
+    speed_mult = 1.5
+elif "Max" in playback_speed:
+    speed_mult = 999.0
 
 st.sidebar.markdown("---")
 col_start, col_stop = st.sidebar.columns(2)
@@ -772,7 +788,7 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=640)
+                    render_video_frame(video_placeholder1, ann1, max_w=540)
 
                     # Update in-video control bar timecode and live AI tracking status
                     cur_f = int(cap1.get(cv2.CAP_PROP_POS_FRAMES))
@@ -812,11 +828,11 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_fps = min(18.0, float(video_fps))
-                    target_delay = 1.0 / target_fps
+                    target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
                     elapsed = time.perf_counter() - t_start
-                    sleep_time = max(0.012, target_delay - elapsed)
-                    time.sleep(sleep_time)
+                    sleep_time = max(0.0, target_delay - elapsed)
+                    if sleep_time > 0.001:
+                        time.sleep(sleep_time)
             finally:
                 cap1.release()
 
@@ -859,7 +875,7 @@ if st.session_state.is_running:
                             fps_history.pop(0)
                         avg_fps = sum(fps_history) / len(fps_history)
 
-                        render_video_frame(video_placeholder1, ann1, max_w=640)
+                        render_video_frame(video_placeholder1, ann1, max_w=540)
 
                         # Update metrics on every frame
                         m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
@@ -930,8 +946,8 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=640)
-                    render_video_frame(video_placeholder2, ann2, max_w=640)
+                    render_video_frame(video_placeholder1, ann1, max_w=540)
+                    render_video_frame(video_placeholder2, ann2, max_w=540)
 
                     if frame_idx % 5 == 0:
                         total_unique = len(pipeline.gallery.identities)
@@ -946,11 +962,11 @@ if st.session_state.is_running:
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
-                    target_fps = min(18.0, float(video_fps))
-                    target_delay = 1.0 / target_fps
+                    target_delay = (1.0 / max(10.0, float(video_fps))) / max(0.1, speed_mult)
                     elapsed = time.perf_counter() - t_start
-                    sleep_time = max(0.012, target_delay - elapsed)
-                    time.sleep(sleep_time)
+                    sleep_time = max(0.0, target_delay - elapsed)
+                    if sleep_time > 0.001:
+                        time.sleep(sleep_time)
             finally:
                 cap1.release()
                 cap2.release()
@@ -962,7 +978,7 @@ else:
         cap_prev.set(cv2.CAP_PROP_POS_FRAMES, pos)
         r, f = cap_prev.read()
         if r and f is not None:
-            render_video_frame(video_placeholder1, f, max_w=640)
+            render_video_frame(video_placeholder1, f, max_w=540)
             cur_s = pos / video_fps
             if timecode_placeholder:
                 timecode_placeholder.markdown(
@@ -989,9 +1005,9 @@ else:
             r1, f1 = cp1.read()
             r2, f2 = cp2.read()
             if r1 and f1 is not None and video_placeholder1:
-                render_video_frame(video_placeholder1, f1, max_w=640)
+                render_video_frame(video_placeholder1, f1, max_w=540)
             if r2 and f2 is not None and video_placeholder2:
-                render_video_frame(video_placeholder2, f2, max_w=640)
+                render_video_frame(video_placeholder2, f2, max_w=540)
             cp1.release()
             cp2.release()
         st.info("Click **Start Feed** in the sidebar to run inference and record transitions.")
