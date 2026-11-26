@@ -938,11 +938,11 @@ if st.session_state.is_running:
                         m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    # Calm tab update during active streaming (skips expensive forensic mugshot expanders)
-                    if frame_idx % 40 == 0:
+                    # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
+                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 
                     frame_idx += 1
 
@@ -1011,10 +1011,11 @@ if st.session_state.is_running:
                         m_active.metric("Active in Camera View", len(objs1))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                        if frame_idx % 35 == 0:
+                        # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
+                        if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
                             st.session_state.transition_log = list(pipeline.gallery.transition_log)
                             st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
+                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 
                         frame_idx += 1
                         time.sleep(0.015)
@@ -1107,10 +1108,11 @@ if st.session_state.is_running:
                         m_cam2.metric("Active in Camera 02", len(objs2))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    if frame_idx % 40 == 0:
+                    # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
+                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 
                     frame_idx += 1
 

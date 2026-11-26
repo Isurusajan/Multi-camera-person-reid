@@ -188,6 +188,14 @@ class GlobalIdentityGallery:
                 "event": f"First detected & registered in {cam_id}"
             }]
         }
+        self.transition_log.append({
+            "time": time_str,
+            "global_id": new_gid,
+            "from_cam": cam_id,
+            "to_cam": cam_id,
+            "similarity": 1.0,
+            "event_type": "New Person Registered"
+        })
         self.active_in_cam[cam_id][local_id] = new_gid
         return new_gid, 1.0, False
 
