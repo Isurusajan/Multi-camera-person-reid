@@ -265,6 +265,28 @@ def render_timeline_bar(placeholder, current_frame, total_frames, video_fps, is_
     else:
         placeholder.markdown(html_code, unsafe_allow_html=True)
 
+# Persistent Session State
+if "is_running" not in st.session_state:
+    st.session_state.is_running = False
+if "transition_log" not in st.session_state:
+    st.session_state.transition_log = []
+if "gallery_data" not in st.session_state:
+    st.session_state.gallery_data = {}
+if "current_frame_pos" not in st.session_state:
+    st.session_state.current_frame_pos = 0
+if "scrubber_pos" not in st.session_state:
+    st.session_state.scrubber_pos = 0.0
+if "timeline_scrubber_slider" not in st.session_state:
+    st.session_state.timeline_scrubber_slider = 0.0
+
+# Primary Action Controls (AT THE VERY TOP OF SIDEBAR: ZERO SCROLLING REQUIRED!)
+st.sidebar.markdown("### ⚡ Feed Controls")
+col_start, col_stop = st.sidebar.columns(2)
+btn_start = col_start.button("▶️ Start Feed", use_container_width=True, type="primary")
+btn_stop = col_stop.button("⏸️ Stop Feed", use_container_width=True)
+btn_clear = st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True)
+st.sidebar.markdown("---")
+
 # Sidebar Settings
 st.sidebar.header("Stream Configuration")
 
@@ -435,20 +457,6 @@ else:  # Live Camera Stream (Webcam / IP Camera)
         st.sidebar.caption("🌐 Ready to connect to network IP camera.")
     cam2_source = None
 
-# Persistent Session State
-if "is_running" not in st.session_state:
-    st.session_state.is_running = False
-if "transition_log" not in st.session_state:
-    st.session_state.transition_log = []
-if "gallery_data" not in st.session_state:
-    st.session_state.gallery_data = {}
-if "current_frame_pos" not in st.session_state:
-    st.session_state.current_frame_pos = 0
-if "scrubber_pos" not in st.session_state:
-    st.session_state.scrubber_pos = 0.0
-if "timeline_scrubber_slider" not in st.session_state:
-    st.session_state.timeline_scrubber_slider = 0.0
-
 # Extract Video Metadata immediately so total_frames & video_fps are ready
 total_frames = 1
 video_fps = 30.0
@@ -462,38 +470,8 @@ if cam1_source and isinstance(cam1_source, str) and os.path.exists(cam1_source):
         total_sec = max(1.0, total_frames / video_fps)
         _cap_meta.release()
 
-# Primary Action Controls (Placed immediately below video selection: ZERO SCROLLING REQUIRED!)
-st.sidebar.markdown("---")
-st.sidebar.subheader("⚡ Feed Controls")
-
-playback_speed = st.sidebar.select_slider(
-    "⚡ Playback Speed (Fast-Forward):",
-    options=["1x Real-Time", "2x Fast", "3x Turbo", "4x Blazing", "5x Hyper"],
-    value="2x Fast",
-    help="Fast-forward video footage with smart hardware frame-skipping for rapid analysis & recording!"
-)
-
-speed_mult = 2.0
-frame_step = 2
-if "1x" in playback_speed:
-    speed_mult = 1.0
-    frame_step = 1
-elif "2x" in playback_speed:
-    speed_mult = 2.0
-    frame_step = 2
-elif "3x" in playback_speed:
-    speed_mult = 3.0
-    frame_step = 3
-elif "4x" in playback_speed:
-    speed_mult = 4.0
-    frame_step = 4
-elif "5x" in playback_speed:
-    speed_mult = 5.0
-    frame_step = 5
-
-col_start, col_stop = st.sidebar.columns(2)
-
-if col_start.button("▶️ Start Feed", use_container_width=True, type="primary"):
+# Handle Feed Control Actions (Buttons rendered at the very top of sidebar)
+if btn_start:
     if is_cctv_file and cam1_source is None:
         st.sidebar.warning("⚠️ Please choose or upload a video in the sidebar first.")
     elif is_multi_cam and (cam1_source is None or cam2_source is None):
@@ -508,12 +486,12 @@ if col_start.button("▶️ Start Feed", use_container_width=True, type="primary
         st.session_state.is_running = True
         st.rerun()
 
-if col_stop.button("⏸️ Stop Feed", use_container_width=True):
+if btn_stop:
     st.session_state.is_running = False
     st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
     st.rerun()
 
-if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
+if btn_clear:
     st.session_state.is_running = False
     if "pipeline" in st.session_state and st.session_state.pipeline is not None:
         st.session_state.pipeline.reset()
@@ -525,7 +503,7 @@ if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
     st.session_state.timeline_scrubber_slider = 0.0
     st.rerun()
 
-# Model Parameters Tuning (Grouped in compact expander below action buttons)
+# Model Parameters Tuning (Grouped in compact expander below stream configuration)
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
     conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
@@ -903,6 +881,9 @@ if st.session_state.is_running:
                 if start_frame > 0 and start_frame < total_frames:
                     cap1.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
+                t_wall_start = time.perf_counter()
+                start_frame_pos = start_frame
+
                 while st.session_state.is_running and cap1.isOpened():
                     ret1, frame1 = cap1.read()
                     if not ret1:
@@ -963,20 +944,24 @@ if st.session_state.is_running:
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
-                    # Hardware frame skip to advance video at true fast-forward speed
-                    for _ in range(int(frame_step) - 1):
-                        if not cap1.grab():
-                            break
-
                     frame_idx += 1
 
-                    # Only throttle if running at 1.0x Real-time speed and completed faster than camera FPS
-                    if speed_mult <= 1.0:
-                        target_delay = 1.0 / max(10.0, float(video_fps))
-                        elapsed = time.perf_counter() - t_start
-                        sleep_time = max(0.0, target_delay - elapsed)
-                        if sleep_time > 0.003:
-                            time.sleep(sleep_time)
+                    # Automatic Real-Time Clock Synchronization:
+                    # Video processes at exact natural camera speed (1:1) without lagging or slow-motion.
+                    wall_elapsed = time.perf_counter() - t_wall_start
+                    expected_frame = start_frame_pos + int(wall_elapsed * video_fps)
+
+                    if cur_f < expected_frame:
+                        # Processing took longer than 1/FPS; catch up using fast hardware grab
+                        frames_behind = min(expected_frame - cur_f, 3)
+                        for _ in range(frames_behind):
+                            if not cap1.grab():
+                                break
+                    elif cur_f > expected_frame:
+                        # Processing was faster than camera FPS; natural pacing sleep
+                        ahead_sec = (cur_f - expected_frame) / video_fps
+                        if ahead_sec > 0.003:
+                            time.sleep(min(ahead_sec, 0.033))
             finally:
                 cap1.release()
 
@@ -1058,6 +1043,8 @@ if st.session_state.is_running:
                 total_f1 = int(cap1.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
                 total_f2 = int(cap2.get(cv2.CAP_PROP_FRAME_COUNT)) or 1
                 max_total_frames = max(total_f1, total_f2)
+                t_wall_start = time.perf_counter()
+                start_frame_pos = frame_idx
 
                 while st.session_state.is_running and cap1.isOpened() and cap2.isOpened():
                     ret1, frame1 = cap1.read()
@@ -1123,22 +1110,24 @@ if st.session_state.is_running:
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
-                    # Synchronized dual-camera frame skip to advance video at true fast-forward speed
-                    for _ in range(int(frame_step) - 1):
-                        r1 = cap1.grab()
-                        r2 = cap2.grab()
-                        if not r1 or not r2:
-                            break
-
                     frame_idx += 1
 
-                    # Only throttle if running at 1.0x Real-time speed and completed faster than camera FPS
-                    if speed_mult <= 1.0:
-                        target_delay = 1.0 / max(10.0, float(video_fps))
-                        elapsed = time.perf_counter() - t_start
-                        sleep_time = max(0.0, target_delay - elapsed)
-                        if sleep_time > 0.003:
-                            time.sleep(sleep_time)
+                    # Automatic Real-Time Clock Synchronization for Dual Cameras
+                    wall_elapsed = time.perf_counter() - t_wall_start
+                    expected_frame = start_frame_pos + int(wall_elapsed * video_fps)
+
+                    if frame_idx < expected_frame:
+                        catchup = min(expected_frame - frame_idx, 3)
+                        for _ in range(catchup):
+                            r1 = cap1.grab()
+                            r2 = cap2.grab()
+                            if not r1 or not r2:
+                                break
+                            frame_idx += 1
+                    elif frame_idx > expected_frame:
+                        ahead_sec = (frame_idx - expected_frame) / video_fps
+                        if ahead_sec > 0.003:
+                            time.sleep(min(ahead_sec, 0.033))
             finally:
                 cap1.release()
                 cap2.release()
