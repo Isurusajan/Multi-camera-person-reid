@@ -160,6 +160,47 @@ def render_video_frame(placeholder, frame_bgr, max_w=540):
         else:
             placeholder.markdown(html_code, unsafe_allow_html=True)
 
+def render_timeline_bar(placeholder, current_frame, total_frames, video_fps, is_running=False, avg_fps=0.0):
+    """
+    Renders an edge-to-edge live surveillance timeline bar with moving playhead knob,
+    timecode, frame counter, and AI tracking status.
+    Updates synchronously with video playback in real time without DOM thrashing.
+    """
+    if placeholder is None or total_frames <= 0:
+        return
+    pct = min(100.0, max(0.0, (current_frame / float(total_frames)) * 100.0))
+    cur_sec = current_frame / max(1.0, video_fps)
+    tot_sec = total_frames / max(1.0, video_fps)
+    cur_m, cur_s = int(cur_sec // 60), int(cur_sec % 60)
+    tot_m, tot_s = int(tot_sec // 60), int(tot_sec % 60)
+
+    if is_running:
+        status_badge = f'<span style="color: #4ade80; font-weight: 600;">🟢 {avg_fps:.1f} FPS | Tracking</span>'
+    elif current_frame >= total_frames - 5:
+        status_badge = '<span style="color: #38bdf8; font-weight: 600;">✅ Playback Completed</span>'
+    else:
+        status_badge = '<span style="color: #fbbf24; font-weight: 500;">⏸️ Paused</span>'
+
+    html_code = (
+        f'<div style="width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">'
+        f'<div style="position: relative; width: 100%; height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; margin-bottom: 8px; overflow: visible;">'
+        f'<div style="position: absolute; left: 0; top: 0; width: {pct:.2f}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f43f5e); border-radius: 4px; box-shadow: 0 0 10px rgba(239,68,68,0.6);"></div>'
+        f'<div style="position: absolute; left: calc({pct:.2f}% - 6px); top: -3px; width: 14px; height: 14px; background: #ffffff; border: 3px solid #ef4444; border-radius: 50%; box-shadow: 0 0 8px rgba(239,68,68,0.9); pointer-events: none;"></div>'
+        f'</div>'
+        f'<div style="display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 13px;">'
+        f'<div style="color: #ffffff; font-weight: 600;">'
+        f'⏱️ {cur_m:02d}:{cur_s:02d} / {tot_m:02d}:{tot_s:02d} '
+        f'<span style="color: #94a3b8; font-size: 11px; margin-left: 6px;">(Frame {current_frame}/{total_frames} · {pct:.1f}%)</span>'
+        f'</div>'
+        f'<div>{status_badge}</div>'
+        f'</div>'
+        f'</div>'
+    )
+    if hasattr(placeholder, "html"):
+        placeholder.html(html_code)
+    else:
+        placeholder.markdown(html_code, unsafe_allow_html=True)
+
 # Sidebar Settings
 st.sidebar.header("Stream Configuration")
 
@@ -439,6 +480,7 @@ if is_cctv_file:
     if cam1_source is None:
         video_placeholder1 = st.empty()
         video_placeholder2 = None
+        timeline_placeholder = None
         timecode_placeholder = None
         status_placeholder = None
         video_placeholder1.markdown(
@@ -466,42 +508,31 @@ if is_cctv_file:
         # Video Display Container
         video_placeholder1 = st.empty()
         video_placeholder2 = None
+        timeline_placeholder = st.empty()
+        timecode_placeholder = None
+        status_placeholder = None
+
+        # Render initial timeline state
+        render_timeline_bar(
+            timeline_placeholder,
+            st.session_state.current_frame_pos,
+            total_frames,
+            video_fps,
+            is_running=st.session_state.is_running
+        )
 
         with st.container(key="in_video_controls"):
-            current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
+            # 1. Action & Navigation Buttons Row
+            c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns([2.0, 1.2, 1.2, 1.2, 1.2])
 
-            # Callback for scrubber click/drag seeking
-            def on_timeline_scrub():
-                scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
-                st.session_state.current_frame_pos = int(scrub_val * video_fps)
-                st.session_state.scrubber_pos = scrub_val
-                st.session_state.last_scrub_input = scrub_val
-                st.session_state.is_running = True
-                if "pipeline" in st.session_state and st.session_state.pipeline is not None:
-                    st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
-
-            # 1. Edge-to-Edge In-Video Scrubber Slider (The Single Clean Video Timeline)
-            scrub_sec = st.slider(
-                "Timeline",
-                min_value=0.0,
-                max_value=float(round(total_sec, 1)),
-                value=current_time_val,
-                step=0.5,
-                format="%.1fs",
-                key="timeline_scrubber_slider",
-                label_visibility="collapsed",
-                on_change=on_timeline_scrub,
-                help="Click or drag anywhere on this timeline bar to scrub forward or backward."
-            )
-
-            # 2. In-Video Control Row: [Pause/Resume button] [Live Timecode] [AI Status]
-            ctrl_c1, ctrl_c2, ctrl_c3 = st.columns([1.3, 4.2, 2.5])
-            with ctrl_c1:
+            with c_btn1:
                 is_active = st.session_state.is_running
+                btn_label = "⏸️ Pause Feed" if is_active else ("▶️ Resume Feed" if st.session_state.current_frame_pos > 0 else "▶️ Start Feed")
                 btn_play_pause = st.button(
-                    "⏸️ Pause" if is_active else "▶️ Resume",
+                    btn_label,
                     key="btn_in_video_toggle",
-                    use_container_width=True
+                    use_container_width=True,
+                    type="primary" if not is_active else "secondary"
                 )
                 if btn_play_pause:
                     if st.session_state.is_running:
@@ -509,24 +540,66 @@ if is_cctv_file:
                     else:
                         if st.session_state.current_frame_pos >= total_frames - 5:
                             st.session_state.current_frame_pos = 0
-                            st.session_state.scrubber_pos = 0.0
-                            st.session_state.last_scrub_input = 0.0
+                            st.session_state.timeline_scrubber_slider = 0.0
                         st.session_state.is_running = True
                     st.rerun()
 
-            with ctrl_c2:
-                timecode_placeholder = st.empty()
+            with c_btn2:
+                if st.button("⏮ Start", key="btn_seek_start", use_container_width=True, help="Jump to start (00:00)"):
+                    st.session_state.current_frame_pos = 0
+                    st.session_state.timeline_scrubber_slider = 0.0
+                    if "pipeline" in st.session_state and st.session_state.pipeline:
+                        st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+                    st.rerun()
 
-            with ctrl_c3:
-                status_placeholder = st.empty()
+            with c_btn3:
+                if st.button("⏪ -5s", key="btn_seek_back", use_container_width=True, help="Step backward 5 seconds"):
+                    st.session_state.current_frame_pos = max(0, st.session_state.current_frame_pos - int(5 * video_fps))
+                    st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
+                    st.rerun()
 
-        if "last_scrub_input" not in st.session_state:
-            st.session_state.last_scrub_input = current_time_val
+            with c_btn4:
+                if st.button("⏩ +5s", key="btn_seek_fwd", use_container_width=True, help="Step forward 5 seconds"):
+                    st.session_state.current_frame_pos = min(total_frames - 5, st.session_state.current_frame_pos + int(5 * video_fps))
+                    st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
+                    st.rerun()
+
+            with c_btn5:
+                if st.button("🔁 Replay", key="btn_replay", use_container_width=True, help="Restart video from beginning"):
+                    st.session_state.current_frame_pos = 0
+                    st.session_state.timeline_scrubber_slider = 0.0
+                    st.session_state.is_running = True
+                    if "pipeline" in st.session_state and st.session_state.pipeline:
+                        st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+                    st.rerun()
+
+            # 2. Precision Timeline Scrubber Slider (Drag to jump to any point)
+            current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
+
+            def on_timeline_scrub():
+                scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
+                st.session_state.current_frame_pos = int(scrub_val * video_fps)
+                st.session_state.scrubber_pos = scrub_val
+                if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                    st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+
+            st.slider(
+                "🎯 Precision Scrubber (Drag slider to seek / inspect any frame in video)",
+                min_value=0.0,
+                max_value=float(round(total_sec, 1)),
+                value=current_time_val,
+                step=0.5,
+                format="%.1fs",
+                key="timeline_scrubber_slider",
+                on_change=on_timeline_scrub,
+                help="Click or drag anywhere on this timeline bar to scrub forward or backward."
+            )
 
 elif is_live_stream:
     st.subheader("🔴 Live Camera Feed: Real-Time Person Detection & Re-ID")
     video_placeholder1 = st.empty()
     video_placeholder2 = None
+    timeline_placeholder = None
     timecode_placeholder = None
     status_placeholder = None
 
@@ -544,6 +617,7 @@ else:  # is_multi_cam
     if cam1_source is None or cam2_source is None:
         video_placeholder1 = st.empty()
         video_placeholder2 = None
+        timeline_placeholder = None
         timecode_placeholder = None
         status_placeholder = None
         video_placeholder1.markdown(
@@ -575,6 +649,7 @@ else:  # is_multi_cam
         with feed_col2:
             st.subheader(cam2_title)
             video_placeholder2 = st.empty()
+        timeline_placeholder = st.empty()
         timecode_placeholder = None
         status_placeholder = None
 
@@ -762,19 +837,13 @@ if st.session_state.is_running:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
-                        if timecode_placeholder:
-                            timecode_placeholder.markdown(
-                                "<div style='color: #4ade80; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px;'>"
-                                "✅ Completed! Drag slider to replay"
-                                "</div>",
-                                unsafe_allow_html=True
-                            )
-                        if status_placeholder:
-                            status_placeholder.markdown(
-                                "<div style='text-align: right; color: #94a3b8; font-family: monospace; font-size: 12px; line-height: 32px;'>"
-                                "⏹️ Playback Ended"
-                                "</div>",
-                                unsafe_allow_html=True
+                        if timeline_placeholder is not None:
+                            render_timeline_bar(
+                                timeline_placeholder,
+                                total_frames,
+                                total_frames,
+                                video_fps,
+                                is_running=False
                             )
                         break
 
@@ -795,23 +864,16 @@ if st.session_state.is_running:
                     st.session_state.current_frame_pos = cur_f
                     cur_s = cur_f / video_fps
 
-                    # Smooth timecode & status display without DOM style recalculation thrashing
-                    if frame_idx % 2 == 0:
-                        if timecode_placeholder:
-                            timecode_placeholder.markdown(
-                                f"<div style='color: #ffffff; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
-                                f"⏱️ {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
-                                f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {cur_f}/{total_frames})</span>"
-                                f"</div>",
-                                unsafe_allow_html=True
-                            )
-                        if status_placeholder:
-                            status_placeholder.markdown(
-                                f"<div style='text-align: right; color: #4ade80; font-family: monospace; font-size: 12px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
-                                f"🟢 {avg_fps:.1f} FPS | Tracking"
-                                f"</div>",
-                                unsafe_allow_html=True
-                            )
+                    # Smooth live timeline update in exact real-time sync with video playback
+                    if frame_idx % 2 == 0 and timeline_placeholder is not None:
+                        render_timeline_bar(
+                            timeline_placeholder,
+                            cur_f,
+                            total_frames,
+                            video_fps,
+                            is_running=True,
+                            avg_fps=avg_fps
+                        )
 
                     # Update active in view on every frame so exit/clearance reflects immediately
                     m_active.metric("Active in Camera View", len(objs1))
@@ -932,6 +994,14 @@ if st.session_state.is_running:
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
                         render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
+                        if timeline_placeholder is not None:
+                            render_timeline_bar(
+                                timeline_placeholder,
+                                max_total_frames,
+                                max_total_frames,
+                                video_fps,
+                                is_running=False
+                            )
                         break
 
                     t_start = time.perf_counter()
@@ -948,6 +1018,16 @@ if st.session_state.is_running:
 
                     render_video_frame(video_placeholder1, ann1, max_w=540)
                     render_video_frame(video_placeholder2, ann2, max_w=540)
+
+                    if frame_idx % 2 == 0 and timeline_placeholder is not None:
+                        render_timeline_bar(
+                            timeline_placeholder,
+                            frame_idx,
+                            max_total_frames,
+                            video_fps,
+                            is_running=True,
+                            avg_fps=avg_fps
+                        )
 
                     if frame_idx % 5 == 0:
                         total_unique = len(pipeline.gallery.identities)
@@ -979,21 +1059,13 @@ else:
         r, f = cap_prev.read()
         if r and f is not None:
             render_video_frame(video_placeholder1, f, max_w=540)
-            cur_s = pos / video_fps
-            if timecode_placeholder:
-                timecode_placeholder.markdown(
-                    f"<div style='color: #fbbf24; font-family: monospace; font-size: 13px; font-weight: 600; line-height: 32px; white-space: nowrap;'>"
-                    f"⏸️ Paused at {int(cur_s//60):02d}:{int(cur_s%60):02d} / {int(total_sec//60):02d}:{int(total_sec%60):02d} "
-                    f"<span style='color: #94a3b8; font-size: 11px;'>(Frame {pos}/{total_frames})</span>"
-                    f"</div>",
-                    unsafe_allow_html=True
-                )
-            if status_placeholder:
-                status_placeholder.markdown(
-                    "<div style='text-align: right; color: #f59e0b; font-family: monospace; font-size: 12px; line-height: 32px; white-space: nowrap;'>"
-                    "⏸️ Paused (Drag to Seek)"
-                    "</div>",
-                    unsafe_allow_html=True
+            if timeline_placeholder is not None:
+                render_timeline_bar(
+                    timeline_placeholder,
+                    pos,
+                    total_frames,
+                    video_fps,
+                    is_running=False
                 )
         cap_prev.release()
     elif is_live_stream:
