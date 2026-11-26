@@ -301,12 +301,14 @@ if is_cctv_file:
         "Choose Video Footage:",
         [
             "-- Choose a Video --",
+            "🏪 Demo 1: Store Interior Aisle (Yellow Jacket Person)",
+            "🚶 Demo 2: Street Sidewalk Outside (Yellow Jacket Person)",
+            "🛒 Demo 3: Store Checkout Counter",
+            "🍿 Demo 4: Retail Mart Snack Aisle",
             "📁 Upload CCTV Video File (.mp4, .avi)",
-            "🏪 Demo 1: Store Checkout Counter",
-            "🛒 Demo 2: Retail Mart Snack Aisle",
         ],
         index=0,
-        help="Select '-- Choose a Video --' to start empty, upload your own video, or select a demo footage"
+        help="Select '-- Choose a Video --' to start empty, choose a demo footage, or upload your own video"
     )
 
     if video_source_option == "📁 Upload CCTV Video File (.mp4, .avi)":
@@ -334,13 +336,25 @@ if is_cctv_file:
             cam1_source = None
             st.sidebar.info("👈 Please select or drag a video file to upload.")
 
-    elif video_source_option == "🏪 Demo 1: Store Checkout Counter":
+    elif video_source_option == "🏪 Demo 1: Store Interior Aisle (Yellow Jacket Person)":
+        inside_path = os.path.join("videos", "street_store_cam1_inside.mp4")
+        if os.path.exists(inside_path):
+            cam1_source = inside_path
+            st.sidebar.success("📹 Loaded: Store Interior Aisle Surveillance (Person in Yellow Jacket)")
+
+    elif video_source_option == "🚶 Demo 2: Street Sidewalk Outside (Yellow Jacket Person)":
+        outside_path = os.path.join("videos", "street_store_cam2_outside.mp4")
+        if os.path.exists(outside_path):
+            cam1_source = outside_path
+            st.sidebar.success("📹 Loaded: Street Sidewalk Outside Storefront (Person in Yellow Jacket)")
+
+    elif video_source_option == "🛒 Demo 3: Store Checkout Counter":
         cctv_path = os.path.join("videos", "cctv_single_feed.mp4")
         if os.path.exists(cctv_path):
             cam1_source = cctv_path
             st.sidebar.success("📹 Loaded: Store Checkout Counter Surveillance")
 
-    elif video_source_option == "🛒 Demo 2: Retail Mart Snack Aisle":
+    elif video_source_option == "🍿 Demo 4: Retail Mart Snack Aisle":
         mart_path = os.path.join("videos", "mart_cam1_aisle.mp4")
         if os.path.exists(mart_path):
             cam1_source = mart_path
@@ -358,12 +372,13 @@ elif is_multi_cam:
         "Choose Video Feed Pair:",
         [
             "-- Choose a Dual Video Feed --",
-            "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)",
-            "🔬 Preset 2: EPFL Research Benchmark (Laboratory Walkway)",
+            "🏪 Preset 1: Store & Street Network (Identical Person - Yellow Jacket)",
+            "🛒 Preset 2: Retail Mart Surveillance (Aisle & Cashier Counter)",
+            "🔬 Preset 3: EPFL Research Benchmark (Laboratory Walkway)",
             "📁 Upload Custom Dual Video Files"
         ],
         index=0,
-        help="Choose between synchronized real-world store CCTV feeds or research benchmark pairs!"
+        help="Select synchronized dual-camera feeds featuring the same person inside and outside!"
     )
 
     if st.session_state.get("last_dual_mode") != dual_mode:
@@ -377,13 +392,19 @@ elif is_multi_cam:
         cam2_source = None
         st.sidebar.info("👈 Choose a dual-camera preset or upload videos above.")
 
-    elif dual_mode == "🛒 Preset 1: Retail Mart Surveillance (Aisle & Cashier Counter)":
+    elif dual_mode == "🏪 Preset 1: Store & Street Network (Identical Person - Yellow Jacket)":
+        cam1_source = os.path.join("videos", "street_store_cam1_inside.mp4")
+        cam2_source = os.path.join("videos", "street_store_cam2_outside.mp4")
+        st.sidebar.success("✅ **Store & Street CCTV Active**: Inside Store + Outside Sidewalk")
+        st.sidebar.caption("🏪 Shows the exact same person (Yellow Jacket) walking inside the store (Cam 1) and walking outside on the street (Cam 2) with clear face Re-ID!")
+
+    elif dual_mode == "🛒 Preset 2: Retail Mart Surveillance (Aisle & Cashier Counter)":
         cam1_source = os.path.join("videos", "mart_cam1_aisle.mp4")
         cam2_source = os.path.join("videos", "mart_cam2_counter.mp4")
         st.sidebar.success("✅ **Retail Mart CCTV Active**: Aisle + Cashier Counter")
         st.sidebar.caption("🛒 Real-world store CCTV: Identical customers shopping in snack aisle (Cam 1) and checking out at cashier (Cam 2).")
 
-    elif dual_mode == "🔬 Preset 2: EPFL Research Benchmark (Laboratory Walkway)":
+    elif dual_mode == "🔬 Preset 3: EPFL Research Benchmark (Laboratory Walkway)":
         cam1_source = os.path.join("videos", "reid_cam1.mp4")
         cam2_source = os.path.join("videos", "reid_cam2.mp4")
         st.sidebar.success("✅ **Benchmark Active**: EPFL Multi-Cam Lab")
@@ -662,7 +683,10 @@ elif is_live_stream:
     status_placeholder = None
 
 else:  # is_multi_cam
-    if dual_mode and "Retail Mart" in dual_mode:
+    if dual_mode and "Store & Street" in dual_mode:
+        cam1_title = "Camera 01: Store Interior (Shop Aisle)"
+        cam2_title = "Camera 02: Street Exterior (Sidewalk)"
+    elif dual_mode and "Retail Mart" in dual_mode:
         cam1_title = "Camera 01: Retail Mart - Snack Aisle"
         cam2_title = "Camera 02: Retail Mart - Cashier Counter"
     elif dual_mode and "EPFL" in dual_mode:
