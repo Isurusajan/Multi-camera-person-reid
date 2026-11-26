@@ -511,12 +511,16 @@ with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
     st.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
 
 # Real-Time KPI Metrics Bar
+init_unique = len([k for k, v in st.session_state.gallery_data.items() if v.get("count", 0) >= 8])
+if init_unique == 0 and len(st.session_state.gallery_data) > 0:
+    init_unique = len(st.session_state.gallery_data)
+
 if not is_multi_cam:
     col_m1, col_m2, col_m3 = st.columns(3)
     m_unique = col_m1.empty()
     m_active = col_m2.empty()
     m_fps = col_m3.empty()
-    m_unique.metric("Total Unique Persons Identified", len(st.session_state.gallery_data))
+    m_unique.metric("Total Unique Persons Identified", init_unique)
     m_active.metric("Active in Camera View", 0)
     m_fps.metric("Processing Rate", "0.0 FPS")
 else:
@@ -525,7 +529,7 @@ else:
     m_cam1 = col_m2.empty()
     m_cam2 = col_m3.empty()
     m_fps = col_m4.empty()
-    m_unique.metric("Total Unique Persons Identified", len(st.session_state.gallery_data))
+    m_unique.metric("Total Unique Persons Identified", init_unique)
     m_cam1.metric("Active in Camera 01", 0)
     m_cam2.metric("Active in Camera 02", 0)
     m_fps.metric("Processing Rate", "0.0 FPS")
@@ -598,6 +602,8 @@ if is_cctv_file:
                             st.session_state.scrubber_pos = scrub_val
                             if "pipeline" in st.session_state and st.session_state.pipeline is not None:
                                 st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
+                                st.session_state.pipeline.gallery.active_in_cam["CAM_02"].clear()
+                                st.session_state.pipeline.gallery.track_history_cam.clear()
 
                         st.slider(
                             "Timeline",
@@ -765,12 +771,21 @@ with tab4:
     """)
 
 def render_tabs(trans_log, gallery_identities, include_dossier=True):
+    # Filter confirmed identities (count >= 4 frames) to eliminate transient 1-2 frame detector flickers
+    confirmed_identities = {k: v for k, v in gallery_identities.items() if v.get("count", 0) >= 8}
+    display_identities = confirmed_identities if confirmed_identities else gallery_identities
+
     # Tab 1: Activity & Re-ID Events
     with transition_placeholder.container():
         if trans_log:
+            valid_gids = set(display_identities.keys())
+            filtered_events = [e for e in trans_log if e.get("global_id") in valid_gids]
+            if not filtered_events and trans_log:
+                filtered_events = trans_log
+
             if is_single_cam:
                 formatted_events = []
-                for entry in trans_log[::-1]:
+                for entry in filtered_events[::-1]:
                     formatted_events.append({
                         "Timestamp": entry.get("time", ""),
                         "Person Tag": f"Person #{entry.get('global_id', '')}",
@@ -781,7 +796,7 @@ def render_tabs(trans_log, gallery_identities, include_dossier=True):
                 st.dataframe(pd.DataFrame(formatted_events), width="stretch")
             else:
                 formatted_events = []
-                for entry in trans_log[::-1]:
+                for entry in filtered_events[::-1]:
                     formatted_events.append({
                         "Timestamp": entry.get("time", ""),
                         "Person Tag": f"Person #{entry.get('global_id', '')}",
@@ -799,9 +814,9 @@ def render_tabs(trans_log, gallery_identities, include_dossier=True):
 
     # Tab 2: Clean Master Identity Registry Table
     with gallery_placeholder.container():
-        if gallery_identities:
+        if display_identities:
             reg_data = []
-            for gid, meta in gallery_identities.items():
+            for gid, meta in display_identities.items():
                 reg_data.append({
                     "Global ID": f"Person #{gid}",
                     "Current Zone": meta["last_cam"],
@@ -819,11 +834,11 @@ def render_tabs(trans_log, gallery_identities, include_dossier=True):
         return
 
     with dossier_placeholder.container():
-        if gallery_identities:
+        if display_identities:
             st.markdown("#### Person Forensic Dossier & Visual Multi-Shot Inspector")
             st.caption("Review multi-angle CCTV snapshots, clothing/appearance features, and camera trajectory for each tracked individual.")
 
-            for gid, meta in gallery_identities.items():
+            for gid, meta in display_identities.items():
                 snaps = meta.get("snapshots", [])
                 exp_label = f"👤 Person #{gid} | Currently in {meta['last_cam']} ({len(snaps)} Multi-Angle Snapshots Captured)"
                 with st.expander(exp_label, expanded=(gid == 1)):
@@ -934,7 +949,8 @@ if st.session_state.is_running:
                     # Update all KPI metrics together every 5 frames to maximize WebSocket throughput & eliminate stutter
                     if frame_idx % 5 == 0:
                         m_active.metric("Active in Camera View", len(objs1))
-                        total_unique = len(pipeline.gallery.identities)
+                        confirmed_count = len([k for k, v in pipeline.gallery.identities.items() if v.get("count", 0) >= 8])
+                        total_unique = confirmed_count if (confirmed_count > 0 or not pipeline.gallery.identities) else len(pipeline.gallery.identities)
                         m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
@@ -1007,7 +1023,9 @@ if st.session_state.is_running:
                         render_video_frame(video_placeholder1, ann1, max_w=640)
 
                         # Update metrics on every frame
-                        m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
+                        confirmed_count = len([k for k, v in pipeline.gallery.identities.items() if v.get("count", 0) >= 8])
+                        total_unique = confirmed_count if (confirmed_count > 0 or not pipeline.gallery.identities) else len(pipeline.gallery.identities)
+                        m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_active.metric("Active in Camera View", len(objs1))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
@@ -1102,7 +1120,8 @@ if st.session_state.is_running:
                         )
 
                     if frame_idx % 5 == 0:
-                        total_unique = len(pipeline.gallery.identities)
+                        confirmed_count = len([k for k, v in pipeline.gallery.identities.items() if v.get("count", 0) >= 8])
+                        total_unique = confirmed_count if (confirmed_count > 0 or not pipeline.gallery.identities) else len(pipeline.gallery.identities)
                         m_unique.metric("Unique Person Count", total_unique)
                         m_cam1.metric("Active in Camera 01", len(objs1))
                         m_cam2.metric("Active in Camera 02", len(objs2))

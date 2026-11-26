@@ -105,13 +105,12 @@ class ReIDFeatureExtractor:
         legs_v_diff = abs(float(emb1[241]) - float(emb2[241]))
 
         # Balanced multi-part visual similarity
-        sim = 0.35 * s_deep + 0.35 * s_torso + 0.30 * s_legs
+        sim = 0.40 * s_deep + 0.30 * s_torso + 0.30 * s_legs
 
-        # Hard negative suppression on pants/torso contrast (prevents dark vs white clothes false matches)
-        if legs_v_diff > 0.25:
-            sim *= max(0.15, 1.0 - (legs_v_diff * 1.6))
-        elif s_legs < 0.40:
-            sim *= 0.60
+        # Robust contrast penalty (prevents dark vs white clothes false matches without penalizing same-person back view)
+        if legs_v_diff > 0.30:
+            penalty = min(0.50, (legs_v_diff - 0.30) * 2.0)
+            sim = max(0.15, sim - penalty)
 
         return float(max(0.0, min(1.0, sim)))
 

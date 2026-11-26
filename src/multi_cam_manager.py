@@ -31,6 +31,7 @@ class GlobalIdentityGallery:
         self.next_global_id = 1
         self.identities = {}
         self.active_in_cam = defaultdict(dict)
+        self.track_history_cam = defaultdict(dict)  # cam_id -> {local_id: (gid, timestamp)}
         self.transition_log = []
 
     def reset(self):
@@ -38,6 +39,7 @@ class GlobalIdentityGallery:
         self.next_global_id = 1
         self.identities.clear()
         self.active_in_cam.clear()
+        self.track_history_cam.clear()
         self.transition_log.clear()
 
     def associate_or_register(self, local_id, cam_id, embedding=None, timestamp=None, crop=None):
@@ -45,20 +47,29 @@ class GlobalIdentityGallery:
             timestamp = time.time()
         time_str = time.strftime("%H:%M:%S", time.localtime(timestamp))
 
-        # If already mapped in this camera and track is continuous
+        # 1. Continuous active track in this camera
         if local_id in self.active_in_cam[cam_id]:
             gid = self.active_in_cam[cam_id][local_id]
+            self.track_history_cam[cam_id][local_id] = (gid, timestamp)
+
             if embedding is not None:
-                sim_to_self = ReIDFeatureExtractor.cosine_similarity(embedding, self.identities[gid]["embedding"])
-                # Only update running profile if current frame genuinely matches (> 0.70)
-                # Prevents accidental occlusion (e.g. passing person or desk) from corrupting the profile
-                if sim_to_self >= 0.70:
+                templates = self.identities[gid].setdefault("embeddings", [self.identities[gid]["embedding"]])
+                sims = [ReIDFeatureExtractor.cosine_similarity(embedding, t) for t in templates]
+                max_sim = max(sims) if sims else 0.0
+
+                # Only update running profile if current frame genuinely matches
+                if max_sim >= 0.65:
                     old_emb = self.identities[gid]["embedding"]
                     new_emb = self.alpha * old_emb + (1 - self.alpha) * embedding
                     norm = np.linalg.norm(new_emb[:240])
                     if norm > 1e-6:
                         self.identities[gid]["embedding"][:240] = new_emb[:240] / norm
                         self.identities[gid]["embedding"][240:] = embedding[240:]
+
+                    # Periodically save diverse appearance angles (up to 5 templates per person)
+                    if len(templates) < 5 and min(sims) < 0.85:
+                        templates.append(embedding.copy())
+
             self.identities[gid]["last_cam"] = cam_id
             self.identities[gid]["last_time"] = timestamp
             self.identities[gid]["count"] += 1
@@ -66,10 +77,6 @@ class GlobalIdentityGallery:
             # Periodically accumulate multi-angle snapshots (up to 6 distinct poses)
             if crop is not None and crop.size > 0 and len(self.identities[gid]["snapshots"]) < 6:
                 if (self.identities[gid]["count"] % 25 == 0):
-                    if embedding is not None:
-                        snap_sim = ReIDFeatureExtractor.cosine_similarity(embedding, self.identities[gid]["embedding"])
-                        if snap_sim < 0.65:
-                            return gid, 1.0, False
                     snap = cv2.resize(crop, (140, 280))
                     self.identities[gid]["snapshots"].append({
                         "image": snap,
@@ -78,11 +85,22 @@ class GlobalIdentityGallery:
                     })
             return gid, 1.0, False
 
+        # 2. Brief occlusion recovery in the same camera (< 1.5 seconds)
+        if local_id in self.track_history_cam[cam_id]:
+            old_gid, last_time = self.track_history_cam[cam_id][local_id]
+            if (timestamp - last_time) < 1.5 and old_gid in self.identities:
+                self.active_in_cam[cam_id][local_id] = old_gid
+                self.track_history_cam[cam_id][local_id] = (old_gid, timestamp)
+                self.identities[old_gid]["last_cam"] = cam_id
+                self.identities[old_gid]["last_time"] = timestamp
+                self.identities[old_gid]["count"] += 1
+                return old_gid, 1.0, False
+
         # If this is a new track and embedding is not ready yet
         if embedding is None:
             return 1, 1.0, False
 
-        # Match against all known global identities
+        # 3. Match against known global identities using Multi-Template Matching
         best_gid = None
         best_score = -1.0
         currently_in_same_cam = set(self.active_in_cam[cam_id].values())
@@ -91,12 +109,14 @@ class GlobalIdentityGallery:
             if gid in currently_in_same_cam:
                 continue
 
-            sim = ReIDFeatureExtractor.cosine_similarity(embedding, info["embedding"])
+            templates = info.get("embeddings", [info["embedding"]])
+            scores = [ReIDFeatureExtractor.cosine_similarity(embedding, t) for t in templates]
+            sim = max(scores) if scores else 0.0
             if sim > best_score:
                 best_score = sim
                 best_gid = gid
 
-        # Cross-Camera Match Found
+        # Cross-Camera or Re-identification Match Found
         if best_gid is not None and best_score >= self.similarity_threshold:
             prev_cam = self.identities[best_gid]["last_cam"]
             is_transition = (prev_cam is not None and prev_cam != cam_id)
@@ -107,6 +127,13 @@ class GlobalIdentityGallery:
             if norm > 1e-6:
                 self.identities[best_gid]["embedding"][:240] = new_emb[:240] / norm
                 self.identities[best_gid]["embedding"][240:] = embedding[240:]
+
+            templates = self.identities[best_gid].setdefault("embeddings", [self.identities[best_gid]["embedding"]])
+            if len(templates) < 5:
+                min_s = min(ReIDFeatureExtractor.cosine_similarity(embedding, t) for t in templates)
+                if min_s < 0.85:
+                    templates.append(embedding.copy())
+
             self.identities[best_gid]["last_cam"] = cam_id
             self.identities[best_gid]["last_time"] = timestamp
             self.identities[best_gid]["count"] += 1
@@ -123,6 +150,7 @@ class GlobalIdentityGallery:
                     })
 
             self.active_in_cam[cam_id][local_id] = best_gid
+            self.track_history_cam[cam_id][local_id] = (best_gid, timestamp)
 
             if is_transition:
                 event = {
@@ -163,7 +191,7 @@ class GlobalIdentityGallery:
 
             return best_gid, best_score, True
 
-        # New Person: Register new Global ID with initial snapshot
+        # 4. New Person: Register new Global ID with initial snapshot
         new_gid = self.next_global_id
         self.next_global_id += 1
         thumbnail = cv2.resize(crop, (140, 280)) if (crop is not None and crop.size > 0) else None
@@ -177,6 +205,7 @@ class GlobalIdentityGallery:
 
         self.identities[new_gid] = {
             "embedding": embedding,
+            "embeddings": [embedding.copy()],
             "last_cam": cam_id,
             "last_time": timestamp,
             "count": 1,
@@ -197,6 +226,7 @@ class GlobalIdentityGallery:
             "event_type": "New Person Registered"
         })
         self.active_in_cam[cam_id][local_id] = new_gid
+        self.track_history_cam[cam_id][local_id] = (new_gid, timestamp)
         return new_gid, 1.0, False
 
     def cleanup_inactive(self, cam_id, current_local_ids):
