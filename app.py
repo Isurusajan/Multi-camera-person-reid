@@ -25,12 +25,38 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("Multi-Camera Surveillance & Person Re-Identification")
-st.caption("Real-time video analytics pipeline for cross-camera person tracking, appearance feature extraction, and global identity management.")
-
-# Video Player & Controls CSS
+# Zero-Scroll Compact Layout & Video Player CSS
 st.markdown("""
 <style>
+/* Zero-scroll page container */
+.block-container {
+    padding-top: 0.8rem !important;
+    padding-bottom: 1.5rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
+
+/* Compact KPI metric cards */
+div[data-testid="stMetric"] {
+    background: rgba(15, 23, 42, 0.65) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
+    padding: 4px 10px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+div[data-testid="stMetric"] label {
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    margin-bottom: 0px !important;
+}
+div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+    font-size: 17px !important;
+    font-weight: 700 !important;
+    line-height: 1.2 !important;
+    color: #f8fafc !important;
+}
+
 /* Video Feed Card */
 div[data-testid="stImage"] img {
     border-radius: 10px !important;
@@ -451,32 +477,63 @@ if st.sidebar.button("🗑️ Clear / Reset Results", use_container_width=True):
     st.session_state.timeline_scrubber_slider = 0.0
     st.rerun()
 
-# Metrics Bar
-# Metrics Bar
+# Unified Compact Header Bar: Title on Left + Live KPI Metrics on Right (Zero-Scroll Layout)
 if not is_multi_cam:
-    col_m1, col_m2, col_m3 = st.columns(3)
-    m_unique = col_m1.empty()
-    m_active = col_m2.empty()
-    m_fps = col_m3.empty()
-    m_unique.metric("Total Unique Persons Identified", len(st.session_state.gallery_data))
-    m_active.metric("Active in Camera View", 0)
-    m_fps.metric("Processing Rate", "0.0 FPS")
+    h_col1, h_col2, h_col3, h_col4 = st.columns([4.2, 1.9, 1.9, 2.0])
+    with h_col1:
+        st.markdown(
+            """
+            <div style="padding-top: 1px; margin-bottom: 6px;">
+                <h3 style="margin: 0; font-size: 19px; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                    🎥 Multi-Camera Surveillance & Re-ID
+                </h3>
+                <p style="margin: 1px 0 0 0; font-size: 11px; color: #94a3b8; line-height: 1.2;">
+                    Real-time cross-camera person tracking & forensic Re-ID analytics
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with h_col2:
+        m_unique = st.empty()
+        m_unique.metric("Unique Persons", len(st.session_state.gallery_data))
+    with h_col3:
+        m_active = st.empty()
+        m_active.metric("Active in View", 0)
+    with h_col4:
+        m_fps = st.empty()
+        m_fps.metric("Processing Rate", "0.0 FPS")
 else:
-    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-    m_unique = col_m1.empty()
-    m_cam1 = col_m2.empty()
-    m_cam2 = col_m3.empty()
-    m_fps = col_m4.empty()
-    m_unique.metric("Unique Person Count", len(st.session_state.gallery_data))
-    m_cam1.metric("Active in Camera 01", 0)
-    m_cam2.metric("Active in Camera 02", 0)
-    m_fps.metric("Processing Rate", "0.0 FPS")
-
-st.markdown("---")
+    h_col1, h_col2, h_col3, h_col4, h_col5 = st.columns([3.4, 1.6, 1.6, 1.6, 1.8])
+    with h_col1:
+        st.markdown(
+            """
+            <div style="padding-top: 1px; margin-bottom: 6px;">
+                <h3 style="margin: 0; font-size: 19px; font-weight: 700; color: #f8fafc; letter-spacing: -0.3px;">
+                    🎥 Dual-Camera Surveillance Network
+                </h3>
+                <p style="margin: 1px 0 0 0; font-size: 11px; color: #94a3b8; line-height: 1.2;">
+                    Synchronized multi-camera Re-ID & forensic trajectory mapping
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    with h_col2:
+        m_unique = st.empty()
+        m_unique.metric("Unique Count", len(st.session_state.gallery_data))
+    with h_col3:
+        m_cam1 = st.empty()
+        m_cam1.metric("Cam 01 Active", 0)
+    with h_col4:
+        m_cam2 = st.empty()
+        m_cam2.metric("Cam 02 Active", 0)
+    with h_col5:
+        m_fps = st.empty()
+        m_fps.metric("Processing Rate", "0.0 FPS")
 
 # Video Player View
 if is_cctv_file:
-    st.subheader("🎥 Surveillance Feed: Live Multi-Person Tracking & Forensic Re-ID")
     if cam1_source is None:
         video_placeholder1 = st.empty()
         video_placeholder2 = None
@@ -872,11 +929,11 @@ if st.session_state.is_running:
                         )
 
                     # Update active in view on every frame so exit/clearance reflects immediately
-                    m_active.metric("Active in Camera View", len(objs1))
+                    m_active.metric("Active in View", len(objs1))
 
                     if frame_idx % 4 == 0:
                         total_unique = len(pipeline.gallery.identities)
-                        m_unique.metric("Total Unique Persons Identified", total_unique)
+                        m_unique.metric("Unique Persons", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
                     # Calm tab update during active streaming (skips expensive forensic mugshot expanders)
@@ -936,8 +993,8 @@ if st.session_state.is_running:
                         render_video_frame(video_placeholder1, ann1, max_w=540)
 
                         # Update metrics on every frame
-                        m_unique.metric("Total Unique Persons Identified", len(pipeline.gallery.identities))
-                        m_active.metric("Active in Camera View", len(objs1))
+                        m_unique.metric("Unique Persons", len(pipeline.gallery.identities))
+                        m_active.metric("Active in View", len(objs1))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
                         if frame_idx % 35 == 0:
