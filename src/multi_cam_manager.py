@@ -49,11 +49,16 @@ class GlobalIdentityGallery:
         if local_id in self.active_in_cam[cam_id]:
             gid = self.active_in_cam[cam_id][local_id]
             if embedding is not None:
-                old_emb = self.identities[gid]["embedding"]
-                new_emb = self.alpha * old_emb + (1 - self.alpha) * embedding
-                norm = np.linalg.norm(new_emb)
-                if norm > 1e-6:
-                    self.identities[gid]["embedding"] = new_emb / norm
+                sim_to_self = ReIDFeatureExtractor.cosine_similarity(embedding, self.identities[gid]["embedding"])
+                # Only update running profile if current frame genuinely matches (> 0.70)
+                # Prevents accidental occlusion (e.g. passing person or desk) from corrupting the profile
+                if sim_to_self >= 0.70:
+                    old_emb = self.identities[gid]["embedding"]
+                    new_emb = self.alpha * old_emb + (1 - self.alpha) * embedding
+                    norm = np.linalg.norm(new_emb[:240])
+                    if norm > 1e-6:
+                        self.identities[gid]["embedding"][:240] = new_emb[:240] / norm
+                        self.identities[gid]["embedding"][240:] = embedding[240:]
             self.identities[gid]["last_cam"] = cam_id
             self.identities[gid]["last_time"] = timestamp
             self.identities[gid]["count"] += 1
@@ -61,6 +66,10 @@ class GlobalIdentityGallery:
             # Periodically accumulate multi-angle snapshots (up to 6 distinct poses)
             if crop is not None and crop.size > 0 and len(self.identities[gid]["snapshots"]) < 6:
                 if (self.identities[gid]["count"] % 25 == 0):
+                    if embedding is not None:
+                        snap_sim = ReIDFeatureExtractor.cosine_similarity(embedding, self.identities[gid]["embedding"])
+                        if snap_sim < 0.65:
+                            return gid, 1.0, False
                     snap = cv2.resize(crop, (140, 280))
                     self.identities[gid]["snapshots"].append({
                         "image": snap,
@@ -94,9 +103,10 @@ class GlobalIdentityGallery:
 
             old_emb = self.identities[best_gid]["embedding"]
             new_emb = self.alpha * old_emb + (1 - self.alpha) * embedding
-            norm = np.linalg.norm(new_emb)
+            norm = np.linalg.norm(new_emb[:240])
             if norm > 1e-6:
-                self.identities[best_gid]["embedding"] = new_emb / norm
+                self.identities[best_gid]["embedding"][:240] = new_emb[:240] / norm
+                self.identities[best_gid]["embedding"][240:] = embedding[240:]
             self.identities[best_gid]["last_cam"] = cam_id
             self.identities[best_gid]["last_time"] = timestamp
             self.identities[best_gid]["count"] += 1

@@ -53,56 +53,67 @@ class ReIDFeatureExtractor:
             deep_feat = feat_map.mean(dim=[2, 3]).flatten().cpu().numpy()
         deep_feat = deep_feat / (np.linalg.norm(deep_feat) + 1e-6)
 
-        # 2. Part-based Core Appearance (Torso: 18-48%, Legs: 55-90%, Width: central 25-75%)
-        core_torso = person_crop_bgr[int(h*0.18):int(h*0.48), int(w*0.25):int(w*0.75)]
-        core_legs  = person_crop_bgr[int(h*0.55):int(h*0.90), int(w*0.25):int(w*0.75)]
+        # 2. Part-based Core Appearance (Torso: 18-50%, Legs: 55-92%, Width: central 20-80%)
+        core_torso = person_crop_bgr[int(h*0.18):int(h*0.50), int(w*0.20):int(w*0.80)]
+        core_legs  = person_crop_bgr[int(h*0.55):int(h*0.92), int(w*0.20):int(w*0.80)]
         if core_torso.size == 0: core_torso = person_crop_bgr
         if core_legs.size == 0: core_legs = person_crop_bgr
 
-        lab_t = cv2.cvtColor(core_torso, cv2.COLOR_BGR2LAB)
-        lab_l = cv2.cvtColor(core_legs, cv2.COLOR_BGR2LAB)
-
-        # Torso: L (16 bins), a (8 bins), b (8 bins)
-        ht_L = cv2.calcHist([lab_t], [0], None, [16], [0, 256]).flatten()
-        ht_a = cv2.calcHist([lab_t], [1], None, [8], [0, 256]).flatten()
-        ht_b = cv2.calcHist([lab_t], [2], None, [8], [0, 256]).flatten()
-        c_torso = np.concatenate([ht_L, ht_a, ht_b])
+        # Torso HSV (H: 16 bins, S: 16 bins, V: 16 bins = 48 bins)
+        hsv_t = cv2.cvtColor(core_torso, cv2.COLOR_BGR2HSV)
+        ht_h = cv2.calcHist([hsv_t], [0], None, [16], [0, 180]).flatten()
+        ht_s = cv2.calcHist([hsv_t], [1], None, [16], [0, 256]).flatten()
+        ht_v = cv2.calcHist([hsv_t], [2], None, [16], [0, 256]).flatten()
+        c_torso = np.concatenate([ht_h, ht_s, ht_v])
         c_torso /= (np.linalg.norm(c_torso) + 1e-6)
 
-        # Legs Lightness (32 bins for high discriminative precision on pants)
-        hl_L = cv2.calcHist([lab_l], [0], None, [32], [0, 256]).flatten()
-        hl_L /= (np.linalg.norm(hl_L) + 1e-6)
+        # Legs HSV (H: 16 bins, S: 16 bins, V: 32 bins = 64 bins for high lightness precision on pants)
+        hsv_l = cv2.cvtColor(core_legs, cv2.COLOR_BGR2HSV)
+        hl_h = cv2.calcHist([hsv_l], [0], None, [16], [0, 180]).flatten()
+        hl_s = cv2.calcHist([hsv_l], [1], None, [16], [0, 256]).flatten()
+        hl_v = cv2.calcHist([hsv_l], [2], None, [32], [0, 256]).flatten()
+        c_legs = np.concatenate([hl_h, hl_s, hl_v])
+        c_legs /= (np.linalg.norm(c_legs) + 1e-6)
 
-        # Legs Color (a, b channels - 16 bins each)
-        hl_ab = np.concatenate([cv2.calcHist([lab_l], [i], None, [16], [0, 256]).flatten() for i in [1, 2]])
-        hl_ab /= (np.linalg.norm(hl_ab) + 1e-6)
-
-        # Balanced, robust composite representation for both full-body and counter/seated views
-        v_deep = 0.45 * deep_feat[:128] / (np.linalg.norm(deep_feat[:128]) + 1e-6)
-        v_torso = 0.35 * c_torso / (np.linalg.norm(c_torso) + 1e-6)
-        v_legs_L = 0.25 * hl_L / (np.linalg.norm(hl_L) + 1e-6)
-        v_legs_ab = 0.15 * hl_ab / (np.linalg.norm(hl_ab) + 1e-6)
-
+        # Assemble structured 512-dim embedding:
+        # [0:128]   - Normalized deep feature
+        # [128:176] - Normalized Torso HSV (48)
+        # [176:240] - Normalized Legs HSV (64)
+        # [240]     - Torso brightness mean (0.0 to 1.0)
+        # [241]     - Legs brightness mean (0.0 to 1.0)
         full = np.zeros(self.embedding_dim, dtype=np.float32)
-        p = 0
-        full[p:p+len(v_deep)] = v_deep; p += len(v_deep)
-        full[p:p+len(v_torso)] = v_torso; p += len(v_torso)
-        full[p:p+len(v_legs_L)] = v_legs_L; p += len(v_legs_L)
-        full[p:p+len(v_legs_ab)] = v_legs_ab; p += len(v_legs_ab)
-
-        norm = np.linalg.norm(full)
-        if norm > 1e-6:
-            full = full / norm
+        full[0:128] = deep_feat[:128] / (np.linalg.norm(deep_feat[:128]) + 1e-6)
+        full[128:176] = c_torso
+        full[176:240] = c_legs
+        full[240] = float(np.mean(hsv_t[:, :, 2])) / 255.0
+        full[241] = float(np.mean(hsv_l[:, :, 2])) / 255.0
 
         return full
 
     @staticmethod
     def cosine_similarity(emb1, emb2):
-        norm1 = np.linalg.norm(emb1)
-        norm2 = np.linalg.norm(emb2)
+        if emb1 is None or emb2 is None:
+            return 0.0
+        norm1 = np.linalg.norm(emb1[:240])
+        norm2 = np.linalg.norm(emb2[:240])
         if norm1 < 1e-6 or norm2 < 1e-6:
             return 0.0
-        return float(np.dot(emb1, emb2) / (norm1 * norm2))
+
+        s_deep = float(np.dot(emb1[0:128], emb2[0:128]))
+        s_torso = float(np.dot(emb1[128:176], emb2[128:176]))
+        s_legs = float(np.dot(emb1[176:240], emb2[176:240]))
+        legs_v_diff = abs(float(emb1[241]) - float(emb2[241]))
+
+        # Balanced multi-part visual similarity
+        sim = 0.35 * s_deep + 0.35 * s_torso + 0.30 * s_legs
+
+        # Hard negative suppression on pants/torso contrast (prevents dark vs white clothes false matches)
+        if legs_v_diff > 0.25:
+            sim *= max(0.15, 1.0 - (legs_v_diff * 1.6))
+        elif s_legs < 0.40:
+            sim *= 0.60
+
+        return float(max(0.0, min(1.0, sim)))
 
 if __name__ == "__main__":
     extractor = ReIDFeatureExtractor()

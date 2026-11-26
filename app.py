@@ -1054,9 +1054,11 @@ if st.session_state.is_running:
                     if not ret1:
                         cap1.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         ret1, frame1 = cap1.read()
+                        pipeline.gallery.active_in_cam["CAM_01"].clear()
                     if not ret2:
                         cap2.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         ret2, frame2 = cap2.read()
+                        pipeline.gallery.active_in_cam["CAM_02"].clear()
 
                     if (not ret1 and not ret2) or frame_idx >= max_total_frames:
                         st.session_state.is_running = False
