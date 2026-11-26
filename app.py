@@ -507,8 +507,8 @@ if btn_clear:
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
     conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
-    reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.67, 0.02)
-    st.caption("💡 Recommended: **0.65 - 0.70** (keeps customer & barista distinct while consolidating profiles).")
+    reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.60, 0.02)
+    st.caption("💡 Recommended: **0.58 - 0.62** (robust cross-angle tracking & profile consolidation).")
 
 # Real-Time KPI Metrics Bar
 init_unique = len([k for k, v in st.session_state.gallery_data.items() if v.get("count", 0) >= 8])
@@ -954,11 +954,11 @@ if st.session_state.is_running:
                         m_unique.metric("Total Unique Persons Identified", total_unique)
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
-                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
+                    # Live tab update during streaming (fast lightweight events table update, no image spam)
+                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 20 == 0):
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
 
@@ -980,6 +980,7 @@ if st.session_state.is_running:
                             time.sleep(min(ahead_sec, 0.033))
             finally:
                 cap1.release()
+                render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 
     elif is_live_stream:
         if cam1_source is None:
@@ -1029,16 +1030,17 @@ if st.session_state.is_running:
                         m_active.metric("Active in Camera View", len(objs1))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                        # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
-                        if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
+                        # Live tab update during streaming (fast lightweight events table update, no image spam)
+                        if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 20 == 0):
                             st.session_state.transition_log = list(pipeline.gallery.transition_log)
                             st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
+                            render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                         frame_idx += 1
                         time.sleep(0.015)
                 finally:
                     cap1.release()
+                    render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 
     else:  # is_multi_cam
         if cam1_source is None or cam2_source is None:
@@ -1127,11 +1129,11 @@ if st.session_state.is_running:
                         m_cam2.metric("Active in Camera 02", len(objs2))
                         m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
-                    # Live tab and dossier update during streaming (updates immediately on new person or every 30 frames)
-                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
+                    # Live tab update during streaming (fast lightweight events table update, no image spam)
+                    if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 20 == 0):
                         st.session_state.transition_log = list(pipeline.gallery.transition_log)
                         st.session_state.gallery_data = dict(pipeline.gallery.identities)
-                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
+                        render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                     frame_idx += 1
 
@@ -1154,6 +1156,7 @@ if st.session_state.is_running:
             finally:
                 cap1.release()
                 cap2.release()
+                render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
 else:
     # When feed is stopped / paused, display preview frame at current position
     if is_cctv_file and cam1_source and isinstance(cam1_source, str) and os.path.exists(cam1_source):

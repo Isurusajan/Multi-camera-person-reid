@@ -295,6 +295,14 @@ class MultiCameraPipeline:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             track_ids = results[0].boxes.id.int().cpu().numpy()
 
+            # Pre-collect valid current local IDs and purge dead tracks before association
+            for box, local_id in zip(boxes, track_ids):
+                x1, y1, x2, y2 = [int(v) for v in box]
+                if (x2 - x1) >= 15 and (y2 - y1) >= 30:
+                    current_local_ids.add(int(local_id))
+
+            self.gallery.cleanup_inactive(cam_id, current_local_ids)
+
             for box, local_id in zip(boxes, track_ids):
                 x1, y1, x2, y2 = [int(v) for v in box]
                 x1, y1 = max(0, x1), max(0, y1)
@@ -302,8 +310,6 @@ class MultiCameraPipeline:
 
                 if (x2 - x1) < 15 or (y2 - y1) < 30:
                     continue
-
-                current_local_ids.add(local_id)
 
                 # Track-level embedding caching: compute only if new track or every 20 frames
                 is_known_track = local_id in self.gallery.active_in_cam[cam_id]
