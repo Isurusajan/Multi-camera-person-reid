@@ -182,15 +182,15 @@ def render_timeline_bar(placeholder, current_frame, total_frames, video_fps, is_
         status_badge = '<span style="color: #fbbf24; font-weight: 500;">⏸️ Paused</span>'
 
     html_code = (
-        f'<div style="width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 10px 14px; margin-top: 8px; margin-bottom: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">'
-        f'<div style="position: relative; width: 100%; height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; margin-bottom: 8px; overflow: visible;">'
+        f'<div style="width: 100%; background: #0f172a; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 7px 12px; margin-top: 1px; margin-bottom: 2px; box-shadow: 0 4px 15px rgba(0,0,0,0.4);">'
+        f'<div style="position: relative; width: 100%; height: 8px; background: rgba(255,255,255,0.12); border-radius: 4px; margin-bottom: 6px; overflow: visible;">'
         f'<div style="position: absolute; left: 0; top: 0; width: {pct:.2f}%; height: 100%; background: linear-gradient(90deg, #ef4444, #f43f5e); border-radius: 4px; box-shadow: 0 0 10px rgba(239,68,68,0.6);"></div>'
         f'<div style="position: absolute; left: calc({pct:.2f}% - 6px); top: -3px; width: 14px; height: 14px; background: #ffffff; border: 3px solid #ef4444; border-radius: 50%; box-shadow: 0 0 8px rgba(239,68,68,0.9); pointer-events: none;"></div>'
         f'</div>'
-        f'<div style="display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 13px;">'
+        f'<div style="display: flex; justify-content: space-between; align-items: center; font-family: monospace; font-size: 12px; line-height: 1.2;">'
         f'<div style="color: #ffffff; font-weight: 600;">'
         f'⏱️ {cur_m:02d}:{cur_s:02d} / {tot_m:02d}:{tot_s:02d} '
-        f'<span style="color: #94a3b8; font-size: 11px; margin-left: 6px;">(Frame {current_frame}/{total_frames} · {pct:.1f}%)</span>'
+        f'<span style="color: #94a3b8; font-size: 11px; margin-left: 4px;">(Frame {current_frame}/{total_frames} · {pct:.1f}%)</span>'
         f'</div>'
         f'<div>{status_badge}</div>'
         f'</div>'
@@ -508,35 +508,21 @@ if is_cctv_file:
         # Video Display Container
         video_placeholder1 = st.empty()
         video_placeholder2 = None
-        timeline_placeholder = st.empty()
         timecode_placeholder = None
         status_placeholder = None
 
-        # Render initial timeline state
-        render_timeline_bar(
-            timeline_placeholder,
-            st.session_state.current_frame_pos,
-            total_frames,
-            video_fps,
-            is_running=st.session_state.is_running
-        )
+        # Unified Single Player Bar: Dynamic Pause/Resume on Left + Single Seekable Timeline on Right
+        with st.container(key="in_video_player_bar"):
+            c_ctrl, c_timeline = st.columns([1.5, 8.5])
 
-        with st.container(key="in_video_controls"):
-            # 1. Action & Navigation Buttons Row
-            c_btn1, c_btn2, c_btn3, c_btn4, c_btn5 = st.columns([2.0, 1.2, 1.2, 1.2, 1.2])
-
-            with c_btn1:
+            with c_ctrl:
                 is_active = st.session_state.is_running
-                btn_label = "⏸️ Pause Feed" if is_active else ("▶️ Resume Feed" if st.session_state.current_frame_pos > 0 else "▶️ Start Feed")
-                btn_play_pause = st.button(
-                    btn_label,
-                    key="btn_in_video_toggle",
-                    use_container_width=True,
-                    type="primary" if not is_active else "secondary"
-                )
-                if btn_play_pause:
+                btn_label = "⏸️ Pause" if is_active else ("▶️ Resume" if st.session_state.current_frame_pos > 0 else "▶️ Start")
+                btn_type = "secondary" if is_active else "primary"
+                if st.button(btn_label, key="btn_in_video_toggle", use_container_width=True, type=btn_type):
                     if st.session_state.is_running:
                         st.session_state.is_running = False
+                        st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
                     else:
                         if st.session_state.current_frame_pos >= total_frames - 5:
                             st.session_state.current_frame_pos = 0
@@ -544,56 +530,48 @@ if is_cctv_file:
                         st.session_state.is_running = True
                     st.rerun()
 
-            with c_btn2:
-                if st.button("⏮ Start", key="btn_seek_start", use_container_width=True, help="Jump to start (00:00)"):
-                    st.session_state.current_frame_pos = 0
-                    st.session_state.timeline_scrubber_slider = 0.0
-                    if "pipeline" in st.session_state and st.session_state.pipeline:
-                        st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
-                    st.rerun()
+            with c_timeline:
+                timeline_placeholder = st.empty()
+                if not st.session_state.is_running:
+                    # When paused, render the interactive draggable timeline so user can scrub back & forth!
+                    current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
 
-            with c_btn3:
-                if st.button("⏪ -5s", key="btn_seek_back", use_container_width=True, help="Step backward 5 seconds"):
-                    st.session_state.current_frame_pos = max(0, st.session_state.current_frame_pos - int(5 * video_fps))
-                    st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
-                    st.rerun()
+                    def on_timeline_scrub():
+                        scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
+                        st.session_state.current_frame_pos = int(scrub_val * video_fps)
+                        st.session_state.scrubber_pos = scrub_val
+                        if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                            st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
 
-            with c_btn4:
-                if st.button("⏩ +5s", key="btn_seek_fwd", use_container_width=True, help="Step forward 5 seconds"):
-                    st.session_state.current_frame_pos = min(total_frames - 5, st.session_state.current_frame_pos + int(5 * video_fps))
-                    st.session_state.timeline_scrubber_slider = round(st.session_state.current_frame_pos / video_fps, 1)
-                    st.rerun()
-
-            with c_btn5:
-                if st.button("🔁 Replay", key="btn_replay", use_container_width=True, help="Restart video from beginning"):
-                    st.session_state.current_frame_pos = 0
-                    st.session_state.timeline_scrubber_slider = 0.0
-                    st.session_state.is_running = True
-                    if "pipeline" in st.session_state and st.session_state.pipeline:
-                        st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
-                    st.rerun()
-
-            # 2. Precision Timeline Scrubber Slider (Drag to jump to any point)
-            current_time_val = float(min(total_sec, max(0.0, st.session_state.current_frame_pos / video_fps)))
-
-            def on_timeline_scrub():
-                scrub_val = st.session_state.get("timeline_scrubber_slider", 0.0)
-                st.session_state.current_frame_pos = int(scrub_val * video_fps)
-                st.session_state.scrubber_pos = scrub_val
-                if "pipeline" in st.session_state and st.session_state.pipeline is not None:
-                    st.session_state.pipeline.gallery.active_in_cam["CAM_01"].clear()
-
-            st.slider(
-                "🎯 Precision Scrubber (Drag slider to seek / inspect any frame in video)",
-                min_value=0.0,
-                max_value=float(round(total_sec, 1)),
-                value=current_time_val,
-                step=0.5,
-                format="%.1fs",
-                key="timeline_scrubber_slider",
-                on_change=on_timeline_scrub,
-                help="Click or drag anywhere on this timeline bar to scrub forward or backward."
-            )
+                    st.slider(
+                        "Timeline",
+                        min_value=0.0,
+                        max_value=float(round(total_sec, 1)),
+                        value=current_time_val,
+                        step=0.5,
+                        format="%.1fs",
+                        key="timeline_scrubber_slider",
+                        label_visibility="collapsed",
+                        on_change=on_timeline_scrub,
+                        help="Drag anywhere on this timeline to seek forward or backward."
+                    )
+                    cur_m, cur_s = int(current_time_val // 60), int(current_time_val % 60)
+                    tot_m, tot_s = int(total_sec // 60), int(total_sec % 60)
+                    pct = (st.session_state.current_frame_pos / float(total_frames)) * 100.0 if total_frames > 0 else 0.0
+                    st.caption(
+                        f"⏱️ **{cur_m:02d}:{cur_s:02d} / {tot_m:02d}:{tot_s:02d}** "
+                        f"(Frame {st.session_state.current_frame_pos}/{total_frames} · {pct:.1f}%) · "
+                        f"⏸️ *Paused (Drag slider to seek)*"
+                    )
+                else:
+                    # When playing, render initial live moving timeline state
+                    render_timeline_bar(
+                        timeline_placeholder,
+                        st.session_state.current_frame_pos,
+                        total_frames,
+                        video_fps,
+                        is_running=True
+                    )
 
 elif is_live_stream:
     st.subheader("🔴 Live Camera Feed: Real-Time Person Detection & Re-ID")
@@ -649,9 +627,27 @@ else:  # is_multi_cam
         with feed_col2:
             st.subheader(cam2_title)
             video_placeholder2 = st.empty()
-        timeline_placeholder = st.empty()
         timecode_placeholder = None
         status_placeholder = None
+
+        with st.container(key="in_video_player_bar_multi"):
+            c_ctrl_m, c_tl_m = st.columns([1.5, 8.5])
+            with c_ctrl_m:
+                is_active = st.session_state.is_running
+                btn_label = "⏸️ Pause" if is_active else ("▶️ Resume" if st.session_state.current_frame_pos > 0 else "▶️ Start")
+                btn_type = "secondary" if is_active else "primary"
+                if st.button(btn_label, key="btn_in_video_toggle_multi", use_container_width=True, type=btn_type):
+                    st.session_state.is_running = not st.session_state.is_running
+                    st.rerun()
+            with c_tl_m:
+                timeline_placeholder = st.empty()
+                render_timeline_bar(
+                    timeline_placeholder,
+                    st.session_state.current_frame_pos,
+                    total_frames,
+                    video_fps,
+                    is_running=st.session_state.is_running
+                )
 
 # Surveillance Data Tabs
 st.markdown("---")
