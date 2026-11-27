@@ -234,6 +234,11 @@ class GlobalIdentityGallery:
             if local_id not in current_local_ids:
                 del self.active_in_cam[cam_id][local_id]
 
+    def get_confirmed_identities(self, min_count=8):
+        """Return identities verified across at least min_count frames to filter transient detector noise"""
+        return {k: v for k, v in self.identities.items() if v.get("count", 0) >= min_count}
+
+
 
 class MultiCameraPipeline:
     """
@@ -263,6 +268,40 @@ class MultiCameraPipeline:
             if hasattr(m, "predictor") and m.predictor is not None:
                 if hasattr(m.predictor, "trackers"):
                     m.predictor.trackers.clear()
+
+    @staticmethod
+    def filter_contained_boxes(boxes, track_ids=None, containment_thresh=0.55):
+        """
+        Suppress duplicate nested sub-part detections (e.g. head, torso, or partial body
+        detected as an extra person inside a larger full-body detection).
+        """
+        if len(boxes) <= 1:
+            return (boxes, track_ids) if track_ids is not None else boxes
+
+        areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+        order = areas.argsort()[::-1]
+        keep = []
+        for i in order:
+            b1 = boxes[i]
+            a1 = areas[i]
+            is_subpart = False
+            for k in keep:
+                bk = boxes[k]
+                ix1, iy1 = max(b1[0], bk[0]), max(b1[1], bk[1])
+                ix2, iy2 = min(b1[2], bk[2]), min(b1[3], bk[3])
+                iw, ih = max(0, ix2 - ix1), max(0, iy2 - iy1)
+                inter = iw * ih
+                containment = inter / float(a1) if a1 > 0 else 0
+                if containment > containment_thresh:
+                    is_subpart = True
+                    break
+            if not is_subpart:
+                keep.append(i)
+
+        keep = sorted(keep)
+        if track_ids is not None:
+            return boxes[keep], track_ids[keep]
+        return boxes[keep]
 
     def process_camera_frame(self, frame_bgr, cam_id="CAM_01"):
         start_t = time.perf_counter()
@@ -294,6 +333,9 @@ class MultiCameraPipeline:
         if results and len(results) > 0 and results[0].boxes is not None and results[0].boxes.id is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
             track_ids = results[0].boxes.id.int().cpu().numpy()
+
+            # Suppress duplicate nested sub-part boxes (e.g. head/torso detected inside full body)
+            boxes, track_ids = self.filter_contained_boxes(boxes, track_ids, containment_thresh=0.55)
 
             # Pre-collect valid current local IDs and purge dead tracks before association
             for box, local_id in zip(boxes, track_ids):
