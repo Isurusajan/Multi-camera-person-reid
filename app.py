@@ -506,7 +506,7 @@ if btn_clear:
 # Model Parameters Tuning (Grouped in compact expander below stream configuration)
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
-    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.35, 0.05)
+    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.48, 0.02)
     reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.50, 0.02)
     st.caption("💡 Recommended: **0.50 - 0.55** (prevents duplicate IDs and maintains robust Re-ID).")
 
