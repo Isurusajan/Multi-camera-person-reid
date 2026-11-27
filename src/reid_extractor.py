@@ -51,21 +51,37 @@ class ReIDFeatureExtractor:
                                  std=[0.229, 0.224, 0.225])
         ])
 
-        # OpenCV Haar Cascade Face Detectors (CPU-optimized, no extra model needed)
-        self.face_cascade_frontal = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self.face_cascade_profile = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_profileface.xml"
-        )
-        print("[SUCCESS] Re-ID Feature Extractor ready with Face Detection + Body Proportion features!")
+        # OpenCV Haar Cascade Face Detectors (CPU-optimized, cloud-compatible)
+        # Gracefully disabled if cv2.data not available in runtime environment
+        self._face_detection_enabled = False
+        self.face_cascade_frontal = None
+        self.face_cascade_profile = None
+        try:
+            haar_base = cv2.data.haarcascades
+            fc_frontal = cv2.CascadeClassifier(haar_base + "haarcascade_frontalface_default.xml")
+            fc_profile  = cv2.CascadeClassifier(haar_base + "haarcascade_profileface.xml")
+            # Verify they loaded (empty classifier = file not found)
+            if not fc_frontal.empty() and not fc_profile.empty():
+                self.face_cascade_frontal = fc_frontal
+                self.face_cascade_profile = fc_profile
+                self._face_detection_enabled = True
+                print("[SUCCESS] Re-ID Feature Extractor ready with Face Detection + Body Proportion features!")
+            else:
+                print("[WARN] Haar cascade XML not found — face detection disabled, body proportion active.")
+        except AttributeError:
+            print("[WARN] cv2.data unavailable in this environment — face detection disabled, body proportion active.")
+
 
     def _detect_face(self, gray_crop, h, w):
         """
         Detect faces using Haar cascades (frontal first, then profile).
         Returns (face_confidence, face_h_ratio, face_w_ratio).
         face_confidence: 1.0=frontal, 0.7=profile, 0.0=not detected
+        Returns (0, 0, 0) immediately if face detection is unavailable.
         """
+        if not self._face_detection_enabled:
+            return 0.0, 0.0, 0.0
+
         faces = self.face_cascade_frontal.detectMultiScale(
             gray_crop, scaleFactor=1.1, minNeighbors=4,
             minSize=(max(15, w // 5), max(15, h // 8))
