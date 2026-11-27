@@ -506,9 +506,9 @@ if btn_clear:
 # Model Parameters Tuning (Grouped in compact expander below stream configuration)
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
-    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.25, 0.05)
-    reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.60, 0.02)
-    st.caption("💡 Recommended: **0.58 - 0.62** (robust cross-angle tracking & profile consolidation).")
+    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.35, 0.05)
+    reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.50, 0.02)
+    st.caption("💡 Recommended: **0.50 - 0.55** (prevents duplicate IDs and maintains robust Re-ID).")
 
 # Real-Time KPI Metrics Bar
 init_unique = len([k for k, v in st.session_state.gallery_data.items() if v.get("count", 0) >= 8])

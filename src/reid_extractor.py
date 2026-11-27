@@ -205,27 +205,15 @@ class ReIDFeatureExtractor:
             penalty_t = min(0.40, (torso_v_diff - 0.20) * 2.0)
             sim = max(0.0, sim - penalty_t)
 
-        # ── Body proportion penalties ─────────────────────────────────────────
-        # Height ratio: child (box_h/frame_h ~0.25) vs adult (~0.60)
-        # If height ratio differs by >12%, almost certainly different person type
-        if height_diff > 0.12:
-            penalty_h = min(0.80, (height_diff - 0.12) * 4.0)
-            sim = max(0.0, sim - penalty_h)
-
-        # Aspect ratio (w/h): children are squatter/wider than adults
-        if aspect_diff > 0.15:
-            penalty_a = min(0.40, (aspect_diff - 0.15) * 2.5)
-            sim = max(0.0, sim - penalty_a)
-
         # ── Face proportion penalty ───────────────────────────────────────────
-        # Head-to-body ratio: children have much larger heads (1:4) vs adults (1:7)
-        # Only apply when BOTH embeddings have a detected face (confidence > 0.3)
+        # Head-to-body ratio: only apply when BOTH crops have a detected face
         both_have_face = (emb1[244] > 0.3 and emb2[244] > 0.3)
         if both_have_face and face_h_diff > 0.08:
             penalty_f = min(0.50, (face_h_diff - 0.08) * 3.5)
             sim = max(0.0, sim - penalty_f)
 
         return float(max(0.0, min(1.0, sim)))
+
 
 
 if __name__ == "__main__":

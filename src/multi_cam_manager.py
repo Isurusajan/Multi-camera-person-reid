@@ -248,7 +248,7 @@ class MultiCameraPipeline:
     High-Throughput Multi-Camera Tracking Pipeline.
     Runs independent ByteTrack instances per camera at imgsz=320 for 25+ FPS real-time CPU performance.
     """
-    def __init__(self, model_path="yolov8n.pt", reid_threshold=0.60, conf=0.25):
+    def __init__(self, model_path="yolov8n.pt", reid_threshold=0.50, conf=0.35):
         from ultralytics import YOLO
         print(f"[INFO] Initializing Optimized Pipeline with {model_path} (imgsz=320)...")
         self.model_path = model_path
