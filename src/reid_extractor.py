@@ -102,15 +102,21 @@ class ReIDFeatureExtractor:
         s_deep = float(np.dot(emb1[0:128], emb2[0:128]))
         s_torso = float(np.dot(emb1[128:176], emb2[128:176]))
         s_legs = float(np.dot(emb1[176:240], emb2[176:240]))
-        legs_v_diff = abs(float(emb1[241]) - float(emb2[241]))
+        torso_v_diff = abs(float(emb1[240]) - float(emb2[240]))
+        legs_v_diff  = abs(float(emb1[241]) - float(emb2[241]))
 
         # Balanced multi-part visual similarity
-        sim = 0.40 * s_deep + 0.30 * s_torso + 0.30 * s_legs
+        sim = 0.35 * s_deep + 0.30 * s_torso + 0.35 * s_legs
 
-        # Robust contrast penalty (prevents dark vs white clothes false matches without penalizing same-person back view)
-        if legs_v_diff > 0.30:
-            penalty = min(0.50, (legs_v_diff - 0.30) * 2.0)
-            sim = max(0.15, sim - penalty)
+        # Contrast penalty: In surveillance Re-ID, lower-body / pants color (e.g. white/khaki vs black)
+        # is a critical discriminator. If legs lightness differs by more than 0.15, penalize heavily.
+        if legs_v_diff > 0.15:
+            penalty = min(0.60, (legs_v_diff - 0.15) * 2.5)
+            sim = max(0.0, sim - penalty)
+
+        if torso_v_diff > 0.20:
+            penalty_t = min(0.40, (torso_v_diff - 0.20) * 2.0)
+            sim = max(0.0, sim - penalty_t)
 
         return float(max(0.0, min(1.0, sim)))
 

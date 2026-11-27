@@ -67,8 +67,11 @@ class GlobalIdentityGallery:
                         self.identities[gid]["embedding"][240:] = embedding[240:]
 
                     # Periodically save diverse appearance angles (up to 5 templates per person)
-                    if len(templates) < 5 and min(sims) < 0.85:
+                    # Enforce anchor agreement (anchor_sim >= 0.70) to prevent gallery template drift
+                    anchor_sim = ReIDFeatureExtractor.cosine_similarity(embedding, self.identities[gid]["embedding"])
+                    if len(templates) < 5 and min(sims) < 0.85 and anchor_sim >= 0.70:
                         templates.append(embedding.copy())
+
 
             self.identities[gid]["last_cam"] = cam_id
             self.identities[gid]["last_time"] = timestamp
@@ -268,6 +271,15 @@ class MultiCameraPipeline:
             if hasattr(m, "predictor") and m.predictor is not None:
                 if hasattr(m.predictor, "trackers"):
                     m.predictor.trackers.clear()
+
+    def reset_camera(self, cam_id):
+        """Reset tracking and active state for a specific camera when video rewinds or loops"""
+        self.gallery.active_in_cam[cam_id].clear()
+        self.gallery.track_history_cam[cam_id].clear()
+        if cam_id in self.models and hasattr(self.models[cam_id], "predictor") and self.models[cam_id].predictor is not None:
+            if hasattr(self.models[cam_id].predictor, "trackers"):
+                self.models[cam_id].predictor.trackers.clear()
+
 
     @staticmethod
     def filter_contained_boxes(boxes, track_ids=None, containment_thresh=0.55):
