@@ -477,14 +477,19 @@ if btn_start:
     elif is_multi_cam and (cam1_source is None or cam2_source is None):
         st.sidebar.warning("⚠️ Please choose a dual-camera video pair in the sidebar first.")
     else:
-        # If video reached the end earlier, reset to start
-        if st.session_state.current_frame_pos >= total_frames - 5:
+        # If video reached the end earlier or starting fresh from frame 0, reset pipeline & gallery
+        if st.session_state.current_frame_pos >= total_frames - 5 or st.session_state.current_frame_pos == 0:
             st.session_state.current_frame_pos = 0
             st.session_state.scrubber_pos = 0.0
             st.session_state.last_scrub_input = 0.0
             st.session_state.timeline_scrubber_slider = 0.0
+            if "pipeline" in st.session_state and st.session_state.pipeline is not None:
+                st.session_state.pipeline.reset()
+            st.session_state.transition_log = []
+            st.session_state.gallery_data = {}
         st.session_state.is_running = True
         st.rerun()
+
 
 if btn_stop:
     st.session_state.is_running = False
@@ -506,7 +511,7 @@ if btn_clear:
 # Model Parameters Tuning (Grouped in compact expander below stream configuration)
 st.sidebar.markdown("---")
 with st.sidebar.expander("⚙️ AI Parameter Tuning", expanded=False):
-    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.48, 0.02)
+    conf_threshold = st.slider("Detection Confidence", 0.15, 0.85, 0.50, 0.02)
     reid_threshold = st.slider("Re-ID Match Threshold (Cosine)", 0.30, 0.85, 0.50, 0.02)
     st.caption("💡 Recommended: **0.50 - 0.55** (prevents duplicate IDs and maintains robust Re-ID).")
 
