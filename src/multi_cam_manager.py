@@ -274,7 +274,7 @@ class MultiCameraPipeline:
             from ultralytics import YOLO
             self.models[cam_id] = YOLO(self.model_path)
 
-        # Fast tracking with imgsz=288 for maximum CPU throughput
+        # Fast tracking with imgsz=256 for maximum CPU throughput (60+ FPS)
         tracker_path = os.path.join(os.path.dirname(__file__), "..", "configs", "fast_bytetrack.yaml")
         tracker_cfg = tracker_path if os.path.exists(tracker_path) else "bytetrack.yaml"
         results = self.models[cam_id].track(
@@ -282,7 +282,7 @@ class MultiCameraPipeline:
             persist=True,
             classes=[0],
             conf=self.conf,
-            imgsz=288,
+            imgsz=256,
             verbose=False,
             tracker=tracker_cfg
         )

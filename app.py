@@ -898,6 +898,7 @@ if st.session_state.is_running:
 
                 t_wall_start = time.perf_counter()
                 start_frame_pos = start_frame
+                last_display_t = 0
 
                 while st.session_state.is_running and cap1.isOpened():
                     ret1, frame1 = cap1.read()
@@ -928,11 +929,13 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=580, quality=64)
-
-                    # Update in-video control bar timecode and live AI tracking status
                     cur_f = int(cap1.get(cv2.CAP_PROP_POS_FRAMES))
                     st.session_state.current_frame_pos = cur_f
+
+                    t_now = time.perf_counter()
+                    if (t_now - last_display_t >= 0.040) or (cur_f >= total_frames - 2):
+                        render_video_frame(video_placeholder1, ann1, max_w=560, quality=60)
+                        last_display_t = t_now
 
                     # Lightweight timeline update every 8 frames to eliminate WebSocket queue congestion
                     if frame_idx % 8 == 0 and timeline_placeholder is not None:
@@ -980,6 +983,7 @@ if st.session_state.is_running:
             cap1 = cv2.VideoCapture(cam1_source)
             fps_history = []
             frame_idx = 0
+            last_display_t_live = 0
 
             if not cap1.isOpened():
                 st.error(f"❌ Failed to connect to live camera at: {cam1_source}. Please verify webcam connection or RTSP address.")
@@ -1003,23 +1007,26 @@ if st.session_state.is_running:
                             fps_history.pop(0)
                         avg_fps = sum(fps_history) / len(fps_history)
 
-                        render_video_frame(video_placeholder1, ann1, max_w=640)
+                        t_now = time.perf_counter()
+                        if t_now - last_display_t_live >= 0.040:
+                            render_video_frame(video_placeholder1, ann1, max_w=560, quality=60)
+                            last_display_t_live = t_now
 
-                        # Update metrics on every frame
-                        confirmed_count = len([k for k, v in pipeline.gallery.identities.items() if v.get("count", 0) >= 8])
-                        total_unique = confirmed_count if (confirmed_count > 0 or not pipeline.gallery.identities) else len(pipeline.gallery.identities)
-                        m_unique.metric("Total Unique Persons Identified", total_unique)
-                        m_active.metric("Active in Camera View", len(objs1))
-                        m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
+                        # Update metrics every 12 frames
+                        if frame_idx % 12 == 0:
+                            confirmed_count = len([k for k, v in pipeline.gallery.identities.items() if v.get("count", 0) >= 8])
+                            total_unique = confirmed_count if (confirmed_count > 0 or not pipeline.gallery.identities) else len(pipeline.gallery.identities)
+                            m_unique.metric("Total Unique Persons Identified", total_unique)
+                            m_active.metric("Active in Camera View", len(objs1))
+                            m_fps.metric("Processing Rate", f"{avg_fps:.1f} FPS")
 
                         # Live tab update during streaming (fast lightweight events table update, no image spam)
-                        if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 20 == 0):
+                        if (len(pipeline.gallery.identities) > len(st.session_state.gallery_data)) or (frame_idx % 30 == 0):
                             st.session_state.transition_log = list(pipeline.gallery.transition_log)
                             st.session_state.gallery_data = dict(pipeline.gallery.identities)
                             render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=False)
 
                         frame_idx += 1
-                        time.sleep(0.015)
                 finally:
                     cap1.release()
                     render_tabs(st.session_state.transition_log, st.session_state.gallery_data, include_dossier=True)
@@ -1048,6 +1055,7 @@ if st.session_state.is_running:
                 max_total_frames = max(total_f1, total_f2)
                 t_wall_start = time.perf_counter()
                 start_frame_pos = frame_idx
+                last_display_t_multi = 0
 
                 while st.session_state.is_running and cap1.isOpened() and cap2.isOpened():
                     ret1, frame1 = cap1.read()
@@ -1090,8 +1098,11 @@ if st.session_state.is_running:
                         fps_history.pop(0)
                     avg_fps = sum(fps_history) / len(fps_history)
 
-                    render_video_frame(video_placeholder1, ann1, max_w=480, quality=60)
-                    render_video_frame(video_placeholder2, ann2, max_w=480, quality=60)
+                    t_now = time.perf_counter()
+                    if (t_now - last_display_t_multi >= 0.050) or (frame_idx >= max_total_frames - 2):
+                        render_video_frame(video_placeholder1, ann1, max_w=460, quality=55)
+                        render_video_frame(video_placeholder2, ann2, max_w=460, quality=55)
+                        last_display_t_multi = t_now
 
                     if frame_idx % 8 == 0 and timeline_placeholder is not None:
                         render_timeline_bar(
