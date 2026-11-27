@@ -1,6 +1,8 @@
 """
 Step 3: Deep Person Re-Identification (Re-ID) Feature Extractor.
 Ultra-Optimized with torch.inference_mode and 128x64 resolution for 5.1 ms latency.
+Now includes OpenCV Haar Face Detection + Body Proportion features for
+child vs adult discrimination and improved identity separation.
 """
 import cv2
 import numpy as np
@@ -15,7 +17,20 @@ class ReIDFeatureExtractor:
     """
     Extracts deep appearance features using a MobileNetV3 backbone combined with
     part-based (PCB) vertical spatial color and luminance partitioning.
-    Outputs L2-normalized 512-dimensional embedding vectors.
+    Also extracts body proportion features and Haar-based face features.
+
+    Embedding layout (512-dim):
+      [0:128]   - Normalized MobileNetV3 deep features
+      [128:176] - Normalized Torso HSV histogram (48 bins)
+      [176:240] - Normalized Legs HSV histogram  (64 bins)
+      [240]     - Torso brightness mean      (0.0-1.0)
+      [241]     - Legs brightness mean       (0.0-1.0)
+      [242]     - Height ratio (box_h/frame_h) (0.0-1.0)
+      [243]     - Aspect ratio (box_w/box_h)   (0.0-1.0)
+      [244]     - Face detected confidence     (0.0=none, 0.7=profile, 1.0=frontal)
+      [245]     - Face-to-body height ratio    (0.0-1.0)
+      [246]     - Face-to-body width ratio     (0.0-1.0)
+      [247:512] - Reserved zeros
     """
     def __init__(self, embedding_dim=512, device="cpu"):
         self.embedding_dim = embedding_dim
@@ -35,9 +50,50 @@ class ReIDFeatureExtractor:
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                  std=[0.229, 0.224, 0.225])
         ])
-        print("[SUCCESS] Re-ID Feature Extractor ready (Inference Latency: ~5 ms)!")
 
-    def extract_embedding(self, person_crop_bgr):
+        # OpenCV Haar Cascade Face Detectors (CPU-optimized, no extra model needed)
+        self.face_cascade_frontal = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        self.face_cascade_profile = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_profileface.xml"
+        )
+        print("[SUCCESS] Re-ID Feature Extractor ready with Face Detection + Body Proportion features!")
+
+    def _detect_face(self, gray_crop, h, w):
+        """
+        Detect faces using Haar cascades (frontal first, then profile).
+        Returns (face_confidence, face_h_ratio, face_w_ratio).
+        face_confidence: 1.0=frontal, 0.7=profile, 0.0=not detected
+        """
+        faces = self.face_cascade_frontal.detectMultiScale(
+            gray_crop, scaleFactor=1.1, minNeighbors=4,
+            minSize=(max(15, w // 5), max(15, h // 8))
+        )
+        if len(faces) > 0:
+            fx, fy, fw, fh = max(faces, key=lambda f: f[2] * f[3])
+            return 1.0, min(1.0, fh / float(max(h, 1))), min(1.0, fw / float(max(w, 1)))
+
+        faces_p = self.face_cascade_profile.detectMultiScale(
+            gray_crop, scaleFactor=1.1, minNeighbors=3,
+            minSize=(max(15, w // 5), max(15, h // 8))
+        )
+        if len(faces_p) > 0:
+            fx, fy, fw, fh = max(faces_p, key=lambda f: f[2] * f[3])
+            return 0.7, min(1.0, fh / float(max(h, 1))), min(1.0, fw / float(max(w, 1)))
+
+        return 0.0, 0.0, 0.0
+
+
+
+    def extract_embedding(self, person_crop_bgr, frame_h=None):
+        """
+        Extract the full 512-dim appearance embedding for a person crop.
+
+        Args:
+            person_crop_bgr: BGR image crop of the detected person
+            frame_h: Height of the original video frame (for body proportion features)
+        """
         if person_crop_bgr is None or person_crop_bgr.size == 0:
             return np.zeros(self.embedding_dim, dtype=np.float32)
 
@@ -75,20 +131,31 @@ class ReIDFeatureExtractor:
         c_legs = np.concatenate([hl_h, hl_s, hl_v])
         c_legs /= (np.linalg.norm(c_legs) + 1e-6)
 
-        # Assemble structured 512-dim embedding:
-        # [0:128]   - Normalized deep feature
-        # [128:176] - Normalized Torso HSV (48)
-        # [176:240] - Normalized Legs HSV (64)
-        # [240]     - Torso brightness mean (0.0 to 1.0)
-        # [241]     - Legs brightness mean (0.0 to 1.0)
+        # 3. Body Proportion Features
+        # Height ratio: child (0.20-0.45), adult (0.45-0.90) relative to full frame
+        height_ratio = min(1.0, h / float(frame_h)) if (frame_h and frame_h > 0) else 0.5
+        # Aspect ratio (w/h): children are proportionally wider/squatter than adults
+        aspect_ratio = min(1.0, w / float(max(h, 1)))
+
+        # 4. Face Detection (Haar Cascade - CPU-fast, cloud-compatible)
+        gray_crop = cv2.cvtColor(person_crop_bgr, cv2.COLOR_BGR2GRAY)
+        face_conf, face_h_ratio, face_w_ratio = self._detect_face(gray_crop, h, w)
+
+        # 5. Assemble structured 512-dim embedding
         full = np.zeros(self.embedding_dim, dtype=np.float32)
-        full[0:128] = deep_feat[:128] / (np.linalg.norm(deep_feat[:128]) + 1e-6)
+        full[0:128]   = deep_feat[:128] / (np.linalg.norm(deep_feat[:128]) + 1e-6)
         full[128:176] = c_torso
         full[176:240] = c_legs
-        full[240] = float(np.mean(hsv_t[:, :, 2])) / 255.0
-        full[241] = float(np.mean(hsv_l[:, :, 2])) / 255.0
+        full[240]     = float(np.mean(hsv_t[:, :, 2])) / 255.0   # Torso brightness
+        full[241]     = float(np.mean(hsv_l[:, :, 2])) / 255.0   # Legs brightness
+        full[242]     = float(height_ratio)                        # Height ratio vs frame
+        full[243]     = float(aspect_ratio)                        # Width/height ratio
+        full[244]     = float(face_conf)                           # Face detection confidence
+        full[245]     = float(face_h_ratio)                        # Face height / body height
+        full[246]     = float(face_w_ratio)                        # Face width / body width
 
         return full
+
 
     @staticmethod
     def cosine_similarity(emb1, emb2):
@@ -99,29 +166,59 @@ class ReIDFeatureExtractor:
         if norm1 < 1e-6 or norm2 < 1e-6:
             return 0.0
 
-        s_deep = float(np.dot(emb1[0:128], emb2[0:128]))
+        s_deep  = float(np.dot(emb1[0:128], emb2[0:128]))
         s_torso = float(np.dot(emb1[128:176], emb2[128:176]))
-        s_legs = float(np.dot(emb1[176:240], emb2[176:240]))
+        s_legs  = float(np.dot(emb1[176:240], emb2[176:240]))
         torso_v_diff = abs(float(emb1[240]) - float(emb2[240]))
         legs_v_diff  = abs(float(emb1[241]) - float(emb2[241]))
+        height_diff  = abs(float(emb1[242]) - float(emb2[242]))
+        aspect_diff  = abs(float(emb1[243]) - float(emb2[243]))
+        face_h_diff  = abs(float(emb1[245]) - float(emb2[245]))
 
         # Balanced multi-part visual similarity
         sim = 0.35 * s_deep + 0.30 * s_torso + 0.35 * s_legs
 
-        # Contrast penalty: In surveillance Re-ID, lower-body / pants color (e.g. white/khaki vs black)
-        # is a critical discriminator. If legs lightness differs by more than 0.15, penalize heavily.
+        # ── Colour contrast penalties ─────────────────────────────────────────
+        # Pants/legs lightness: white vs black is a critical Re-ID discriminator
         if legs_v_diff > 0.15:
             penalty = min(0.60, (legs_v_diff - 0.15) * 2.5)
             sim = max(0.0, sim - penalty)
 
+        # Torso brightness contrast
         if torso_v_diff > 0.20:
             penalty_t = min(0.40, (torso_v_diff - 0.20) * 2.0)
             sim = max(0.0, sim - penalty_t)
 
+        # ── Body proportion penalties ─────────────────────────────────────────
+        # Height ratio: child (box_h/frame_h ~0.25) vs adult (~0.60)
+        # If height ratio differs by >12%, almost certainly different person type
+        if height_diff > 0.12:
+            penalty_h = min(0.80, (height_diff - 0.12) * 4.0)
+            sim = max(0.0, sim - penalty_h)
+
+        # Aspect ratio (w/h): children are squatter/wider than adults
+        if aspect_diff > 0.15:
+            penalty_a = min(0.40, (aspect_diff - 0.15) * 2.5)
+            sim = max(0.0, sim - penalty_a)
+
+        # ── Face proportion penalty ───────────────────────────────────────────
+        # Head-to-body ratio: children have much larger heads (1:4) vs adults (1:7)
+        # Only apply when BOTH embeddings have a detected face (confidence > 0.3)
+        both_have_face = (emb1[244] > 0.3 and emb2[244] > 0.3)
+        if both_have_face and face_h_diff > 0.08:
+            penalty_f = min(0.50, (face_h_diff - 0.08) * 3.5)
+            sim = max(0.0, sim - penalty_f)
+
         return float(max(0.0, min(1.0, sim)))
+
 
 if __name__ == "__main__":
     extractor = ReIDFeatureExtractor()
     crop = np.random.randint(0, 255, (150, 75, 3), dtype=np.uint8)
-    emb = extractor.extract_embedding(crop)
-    print("Embedding shape:", emb.shape, "L2 norm:", np.linalg.norm(emb))
+    emb = extractor.extract_embedding(crop, frame_h=480)
+    print("Embedding shape :", emb.shape)
+    print("Height ratio    :", emb[242])
+    print("Aspect ratio    :", emb[243])
+    print("Face conf       :", emb[244])
+    print("Face h ratio    :", emb[245])
+    print("Face w ratio    :", emb[246])

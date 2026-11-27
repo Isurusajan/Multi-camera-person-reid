@@ -372,7 +372,7 @@ class MultiCameraPipeline:
                 crop = frame_bgr[y1:y2, x1:x2]
                 embedding = None
                 if needs_embedding:
-                    embedding = self.extractor.extract_embedding(crop)
+                    embedding = self.extractor.extract_embedding(crop, frame_h=h)
 
                 global_id, sim, is_trans = self.gallery.associate_or_register(
                     local_id=local_id,
